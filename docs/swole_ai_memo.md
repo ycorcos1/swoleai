@@ -98,3 +98,15 @@
 - Footer with Privacy/Terms links
 - Background decorations with blurred gradient circles for atmosphere
 - Mobile-first design following PulsePlan spec
+
+### Task 1.2 — Create public pages: Login ✅
+- Created `src/app/login/page.tsx` with full login UI
+- Email field with icon, placeholder, and validation
+- Password field with show/hide toggle button
+- Client-side validation: required checks, email format regex, minimum 6 character password
+- Real-time validation on blur + form submit validation
+- Inline error display with red border, AlertCircle icon, and error message
+- Forgot password link pointing to `/forgot-password`
+- "Create account" link at bottom pointing to `/signup`
+- Loading state with spinner during form submission
+- PulsePlan styling: dark theme, glass background effects, gradient logo
