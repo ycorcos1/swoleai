@@ -123,3 +123,16 @@
 - "Log in" link at bottom pointing to `/login`
 - Loading state with spinner during form submission
 - PulsePlan styling: dark theme, glass background effects, gradient logo matching login page
+
+### Task 1.4 — Create public pages: Forgot Password (UI only) ✅
+- Created `src/app/forgot-password/page.tsx` with password reset request UI
+- Email field with icon, placeholder, and client-side validation (required + email format regex)
+- Real-time validation on blur + form submit validation
+- Inline error display with red border, AlertCircle icon, and error message
+- Loading state with spinner during form submission
+- Success state after submission showing "Check your email" confirmation with submitted email displayed
+- "Try again" button in success state to allow re-submitting
+- "Back to login" links in header and footer
+- "Remember your password? Log in" link at bottom
+- PulsePlan styling: dark theme, glass background effects, gradient logo matching login/signup pages
+- Build verified: `/forgot-password` route included in static pages output
