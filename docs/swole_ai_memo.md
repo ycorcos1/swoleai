@@ -47,3 +47,25 @@
 ## F) Next Docs To Create
 - TASK_LIST.md (last)
 - ERROR_FIX_LOG.md (optional)
+
+---
+
+## G) Implementation Progress
+
+### Task 0.1 — Add `.env.example` ✅
+- `.env.example` created with all required env vars from TECH_STACK.md
+- `.gitignore` added to ensure `.env` (secrets) is never committed
+- Git repo initialized
+
+### Task 0.2 — Add base dependencies (frontend + backend) ✅
+- Next.js 16.1.6 + TypeScript + App Router initialized with `src/` directory
+- Tailwind CSS v4 with `@tailwindcss/postcss` plugin
+- Prisma + `@prisma/client` for ORM
+- NextAuth (next-auth) for authentication
+- Zod for validation
+- TanStack Query (`@tanstack/react-query`) for server state
+- Dexie + `dexie-react-hooks` for IndexedDB offline persistence
+- Lucide (`lucide-react`) for icons
+- `@ducanh2912/next-pwa` for PWA/service worker support
+- Added scripts: `dev`, `build`, `start`, `lint`, `db:generate`, `db:push`, `db:migrate`, `db:studio`
+- Note: Used `process.cwd()` for `turbopack.root` in `next.config.ts` to avoid conflicts with parent directory `package.json`

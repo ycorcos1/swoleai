@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+/* ========================================
+   SwoleAI — PulsePlan Design System
+   Dark-first, glass panels, purple→blue gradient accents
+   ======================================== */
+
+:root {
+  /* Base colors */
+  --color-base-900: #0a0a0f;
+  --color-base-800: #12121a;
+  --color-base-700: #1a1a24;
+  --color-base-600: #22222e;
+  --color-base-500: #2d2d3a;
+  
+  /* Text colors */
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  
+  /* Accent gradient: purple → blue */
+  --color-accent-purple: #8b5cf6;
+  --color-accent-blue: #3b82f6;
+  --color-accent-gradient: linear-gradient(135deg, var(--color-accent-purple) 0%, var(--color-accent-blue) 100%);
+  
+  /* Status colors */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #06b6d4;
+  
+  /* Glass effect */
+  --glass-bg: rgba(26, 26, 36, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 12px;
+  
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  /* Shadows */
+  --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.15);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  
+  /* Layout */
+  --nav-height: 64px;
+  --bottom-nav-height: 72px;
+}
+
+@theme inline {
+  --color-background: var(--color-base-900);
+  --color-foreground: var(--color-text-primary);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Force dark mode - PulsePlan is dark-first */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-base-900);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numerals for weights/reps */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glass card utility */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+/* Primary gradient button */
+.btn-primary {
+  background: var(--color-accent-gradient);
+  color: white;
+  font-weight: 600;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-glow);
+  transition: all 0.2s ease;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.25);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Secondary button */
+.btn-secondary {
+  background: var(--color-base-600);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  transition: all 0.2s ease;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.btn-secondary:hover {
+  background: var(--color-base-500);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Touch-friendly minimum size */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Status pill */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-pill--success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-success);
+}
+
+.status-pill--warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning);
+}
+
+.status-pill--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+.status-pill--info {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--color-info);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: var(--color-accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Safe area padding for PWA */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Subtle scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-base-500);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-base-400);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-purple);
+  outline-offset: 2px;
+}
