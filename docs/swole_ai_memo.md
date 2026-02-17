@@ -110,3 +110,16 @@
 - "Create account" link at bottom pointing to `/signup`
 - Loading state with spinner during form submission
 - PulsePlan styling: dark theme, glass background effects, gradient logo
+
+### Task 1.3 — Create public pages: Signup ✅
+- Created `src/app/signup/page.tsx` with full signup UI
+- Email field with icon, placeholder, and validation (required + email format regex)
+- Password field with show/hide toggle button
+- Confirm password field with show/hide toggle button
+- Client-side validation: email (required + valid format), password (required, min 8 chars, uppercase, lowercase, number), confirm password (required + must match)
+- Real-time validation on blur + form submit validation
+- Inline error display with red border, AlertCircle icon, and error message
+- Password strength indicators showing requirements progress (checkmarks for met criteria)
+- "Log in" link at bottom pointing to `/login`
+- Loading state with spinner during form submission
+- PulsePlan styling: dark theme, glass background effects, gradient logo matching login page
