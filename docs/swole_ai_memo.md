@@ -69,3 +69,32 @@
 - `@ducanh2912/next-pwa` for PWA/service worker support
 - Added scripts: `dev`, `build`, `start`, `lint`, `db:generate`, `db:push`, `db:migrate`, `db:studio`
 - Note: Used `process.cwd()` for `turbopack.root` in `next.config.ts` to avoid conflicts with parent directory `package.json`
+
+### Task 0.3 — Create App Shell layout (PulsePlan baseline) ✅
+- Created `src/app/globals.css` with full PulsePlan design system:
+  - Dark-first color palette (base-900 through base-500, text colors)
+  - Purple→blue gradient accent (`--color-accent-gradient`)
+  - Glass card utility (`.glass-card` with backdrop blur)
+  - Primary/secondary button styles with gradient glow
+  - Status pill variants (success/warning/error/info)
+  - CSS custom properties for spacing, radii, shadows
+  - Safe-area padding for PWA (notch/home indicator)
+  - Tabular numerals for weights/reps
+- Created `AppShell` component (`src/components/layout/AppShell.tsx`) as main authenticated layout wrapper
+- Created `BottomNav` component (`src/components/layout/BottomNav.tsx`) with 5 nav items:
+  - Dashboard, Workout, Routine, Insights, Settings
+  - Active state highlighting using pathname matching
+  - Lucide icons, touch-friendly sizing
+- Created nested `/app` route layout (`src/app/app/layout.tsx`) wrapping children in AppShell
+- Created `/app/dashboard` page with glass cards for Today, Coach Actions, Quick Stats
+- Created reusable `GlassCard` UI component
+- Updated root layout with SwoleAI metadata and dark theme viewport config
+
+### Task 1.1 — Create public pages: Homepage ✅
+- Rebuilt `src/app/page.tsx` as SwoleAI homepage (replacing Next.js boilerplate)
+- Hero section with gradient logo icon (Dumbbell), "SwoleAI" branding, tagline
+- CTA buttons: "Create account" (primary, links to `/signup`), "Log in" (secondary, links to `/login`)
+- 3 feature tiles using `GlassCard` styling: Log fast, AI coach proposals, Versioned routines
+- Footer with Privacy/Terms links
+- Background decorations with blurred gradient circles for atmosphere
+- Mobile-first design following PulsePlan spec
