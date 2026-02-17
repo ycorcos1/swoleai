@@ -136,3 +136,33 @@
 - "Remember your password? Log in" link at bottom
 - PulsePlan styling: dark theme, glass background effects, gradient logo matching login/signup pages
 - Build verified: `/forgot-password` route included in static pages output
+
+### Task 1.5 — Configure Auth.js/NextAuth (server) ✅
+- Created `src/lib/auth/auth.config.ts` with full NextAuth configuration:
+  - Credentials provider for email/password authentication
+  - Zod schema validation for credentials
+  - bcrypt password hashing (12 rounds)
+  - JWT session strategy with 30-day maxAge
+  - Custom callbacks for session/token handling with user id/email
+  - Custom pages config pointing to `/login`, `/signup`
+- Created `src/app/api/auth/[...nextauth]/route.ts` route handler
+- Created `src/app/api/auth/signup/route.ts` for user registration:
+  - Zod validation (email format, password min 8 chars + uppercase + lowercase + number)
+  - Duplicate email check (409 conflict response)
+  - Password hashing with bcrypt before storage
+  - Returns 201 with user id/email on success
+- Created `src/types/next-auth.d.ts` extending Session and JWT types with `id` and `email`
+- Created `src/components/providers/AuthProvider.tsx` wrapping app with `SessionProvider`
+- Updated `src/app/layout.tsx` to wrap children with `<AuthProvider>`
+- Updated `src/app/login/page.tsx`:
+  - Wired form to `signIn('credentials')` from next-auth/react
+  - Redirects to `/app/dashboard` on success
+  - Shows general error banner for invalid credentials
+- Updated `src/app/signup/page.tsx`:
+  - Calls `/api/auth/signup` to create account
+  - Auto signs in after successful signup
+  - Redirects to `/app/dashboard` on success
+  - Shows email-specific error for duplicate account (409)
+- Added `bcryptjs` + `@types/bcryptjs` dependencies
+- Note: In-memory user store used for development; will be replaced with Prisma DB in Task 2.x
+- Build verified: all routes compile, TypeScript passes, lint clean

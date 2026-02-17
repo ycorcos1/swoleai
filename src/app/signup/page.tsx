@@ -2,15 +2,19 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Dumbbell, Eye, EyeOff, ArrowLeft, Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface FormErrors {
   email?: string;
   password?: string;
   confirmPassword?: string;
+  general?: string;
 }
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -82,12 +86,48 @@ export default function SignupPage() {
     }
 
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, general: undefined }));
     
-    // TODO: Implement actual signup logic with NextAuth in Task 1.5
-    // For now, just simulate a delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    setIsSubmitting(false);
+    try {
+      // Create account
+      const signupResponse = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const signupData = await signupResponse.json();
+
+      if (!signupResponse.ok) {
+        if (signupResponse.status === 409) {
+          setErrors((prev) => ({ ...prev, email: 'An account with this email already exists' }));
+        } else {
+          setErrors((prev) => ({ ...prev, general: signupData.error || 'Failed to create account' }));
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Automatically sign in after successful signup
+      const signInResult = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (signInResult?.error) {
+        // Account created but sign-in failed - redirect to login
+        router.push('/login');
+        return;
+      }
+
+      // Successful signup and login - redirect to dashboard
+      router.push('/app/dashboard');
+      router.refresh();
+    } catch {
+      setErrors((prev) => ({ ...prev, general: 'Something went wrong. Please try again.' }));
+      setIsSubmitting(false);
+    }
   };
 
   // Real-time validation on blur
@@ -158,6 +198,14 @@ export default function SignupPage() {
 
           {/* Signup form */}
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {/* General error message */}
+            {errors.general && (
+              <div className="flex items-center gap-2 p-3 bg-[var(--color-error)]/10 border border-[var(--color-error)]/20 rounded-[var(--radius-md)] text-[var(--color-error)] text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errors.general}</span>
+              </div>
+            )}
+            
             {/* Email field */}
             <div className="space-y-1.5">
               <label
