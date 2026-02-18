@@ -279,3 +279,37 @@
 - Ran `prisma migrate dev --name add_day_templates_schema` → migration applied successfully
 - Template supports both modes: FIXED uses WorkoutDayBlock[], SLOT uses WorkoutDaySlot[]
 - Verified: No linter errors in schema file
+
+### Task 2.6 — Add workouts schema (sessions/exercises/sets) ✅
+- Added `WorkoutSession` model in `prisma/schema.prisma` representing actual performed workout logs:
+  - `startedAt` (DateTime), `endedAt` (nullable DateTime)
+  - `status` (enum: ACTIVE, COMPLETED, ABANDONED) — session lifecycle tracking
+  - `title` (nullable String — auto-generated or user-set)
+  - `notes` (nullable String — user can add notes during/after workout)
+  - `userId` + `user` relation (cascade delete)
+  - `splitId` + `split` relation (nullable, onDelete: SetNull) — optional link to split
+  - `templateId` + `template` relation (nullable, onDelete: SetNull) — optional link to template
+  - `constraintFlags` (Json, default `{}` — structure: {pain?, equipmentCrowded?, lowEnergy?})
+  - `exercises` relation to `WorkoutExercise`
+- Added `WorkoutExercise` model representing exercises performed in a session:
+  - `sessionId` + `session` relation (cascade delete)
+  - `exerciseId` + `exercise` relation (onDelete: Restrict)
+  - `orderIndex` (Int) with `@@unique([sessionId, orderIndex])` — allows reordering mid-workout
+  - `notes` (nullable String — exercise-level notes)
+  - `sets` relation to `WorkoutSet`
+- Added `WorkoutSet` model representing individual sets with full logging data:
+  - `workoutExerciseId` + `workoutExercise` relation (cascade delete)
+  - `setIndex` (Int) with `@@unique([workoutExerciseId, setIndex])`
+  - `weight` (Float — in user's preferred unit system)
+  - `reps` (Int)
+  - `rpe` (nullable Float) — Rate of Perceived Exertion for fatigue tracking
+  - `flags` (Json, default `{}` — structure: {warmup?, backoff?, dropset?, failure?}) — affects volume calculations and PR detection
+  - `notes` (nullable String — per-set notes)
+- Created `SessionStatus` enum: ACTIVE, COMPLETED, ABANDONED
+- Added relations: User → workoutSessions, Split → workoutSessions, WorkoutDayTemplate → workoutSessions, Exercise → workoutExercises
+- Added indexes: `[userId]`, `[userId, startedAt]`, `[userId, status]` on workout_sessions; `[sessionId]`, `[exerciseId]` on workout_exercises; `[workoutExerciseId]` on workout_sets
+- Migration file: `prisma/migrations/20260218001515_add_workouts_schema/migration.sql`
+- Ran `prisma migrate dev --name add_workouts_schema` → migration applied successfully
+- Set flags persist as JSONB in PostgreSQL, typed as `Prisma.JsonValue` in TypeScript
+- Verified: `prisma migrate status` shows "6 migrations found, Database schema is up to date!"
+- Verified: `tsc --noEmit` passes with no errors

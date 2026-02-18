@@ -93,6 +93,14 @@ enum Weekday {
   SATURDAY  // 6
 }
 
+// Session status enum (Task 2.6)
+// Tracks the lifecycle of a workout session
+enum SessionStatus {
+  ACTIVE    // Currently in progress
+  COMPLETED // Finished normally
+  ABANDONED // Left incomplete (app closed, user quit)
+}
+
 // =============================================================================
 // CORE MODELS
 // =============================================================================
@@ -129,6 +137,9 @@ model User {
 
   // Relations (Task 2.5)
   workoutDayTemplates WorkoutDayTemplate[] // User's saved workout day templates
+
+  // Relations (Task 2.6)
+  workoutSessions WorkoutSession[] // User's workout session logs
 
   @@map("users")
 }
@@ -174,6 +185,9 @@ model Exercise {
 
   // Relations (Task 2.5)
   workoutDayBlocks WorkoutDayBlock[] // Blocks that use this exercise
+
+  // Relations (Task 2.6)
+  workoutExercises WorkoutExercise[] // Exercise instances in workout sessions
 
   // Index for efficient lookups of user's custom exercises
   @@index([ownerUserId, isCustom])
@@ -234,6 +248,9 @@ model Split {
 
   // Relations
   scheduleDays SplitScheduleDay[] // Days of the week mapped to templates or rest
+
+  // Relations (Task 2.6)
+  workoutSessions WorkoutSession[] // Sessions performed using this split
 
   // Index for efficient lookup of user's splits and active split
   @@index([userId])
@@ -316,6 +333,9 @@ model WorkoutDayTemplate {
   blocks       WorkoutDayBlock[] // For FIXED mode: ordered exercise blocks
   slots        WorkoutDaySlot[]  // For SLOT mode: muscle group slots
   scheduleDays SplitScheduleDay[] // Days that reference this template
+
+  // Relations (Task 2.6)
+  workoutSessions WorkoutSession[] // Sessions performed using this template
 
   // Index for efficient lookup of user's templates
   @@index([userId])
@@ -411,4 +431,130 @@ model WorkoutDaySlot {
   // Index for efficient lookup
   @@index([templateId])
   @@map("workout_day_slots")
+}
+
+// =============================================================================
+// WORKOUT SESSIONS + LOGGING (Task 2.6)
+// =============================================================================
+
+// WorkoutSession model (Task 2.6)
+// Represents an actual performed workout session (the log)
+// Links to user, optionally to split and template for context
+model WorkoutSession {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Session timing
+  startedAt DateTime  @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  // Session status for lifecycle tracking
+  status SessionStatus @default(ACTIVE)
+
+  // Session title (auto-generated or user-set, e.g., "Push A - Jan 15")
+  title String?
+
+  // Session notes (user can add notes during/after workout)
+  notes String?
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Optional link to split this session was performed under
+  // Nullable because user can do freestyle workouts
+  splitId String? @map("split_id")
+  split   Split?  @relation(fields: [splitId], references: [id], onDelete: SetNull)
+
+  // Optional link to template this session was based on
+  // Nullable because user can do freestyle workouts
+  templateId String?             @map("template_id")
+  template   WorkoutDayTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  // Constraint flags for this session (PRD 8.5)
+  // Structure: { pain?: string[], equipmentCrowded?: boolean, lowEnergy?: boolean }
+  // Influences AI proposals and helps contextualize the session
+  constraintFlags Json @default("{}") @map("constraint_flags")
+
+  // Relations
+  exercises WorkoutExercise[] // Exercises performed in this session
+
+  // Index for efficient lookup of user's sessions
+  @@index([userId])
+  @@index([userId, startedAt])
+  @@index([userId, status])
+  @@map("workout_sessions")
+}
+
+// WorkoutExercise model (Task 2.6)
+// Represents a specific exercise performed within a workout session
+// Contains all sets for that exercise in the session
+model WorkoutExercise {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Parent session
+  sessionId String         @map("session_id")
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Exercise performed
+  exerciseId String   @map("exercise_id")
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  // Order within the session (0-indexed)
+  // Allows reordering exercises mid-workout
+  orderIndex Int @map("order_index")
+
+  // Exercise-level notes (e.g., "felt weak today", "try wider grip next time")
+  notes String?
+
+  // Relations
+  sets WorkoutSet[] // Sets performed for this exercise
+
+  // Unique constraint: each session can only have one entry per order index
+  @@unique([sessionId, orderIndex])
+  // Index for efficient lookup
+  @@index([sessionId])
+  @@index([exerciseId])
+  @@map("workout_exercises")
+}
+
+// WorkoutSet model (Task 2.6)
+// Represents a single set performed for an exercise in a session
+// Includes weight, reps, RPE, and flags (warmup/backoff/drop/failure)
+model WorkoutSet {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Parent workout exercise
+  workoutExerciseId String          @map("workout_exercise_id")
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+
+  // Set order within the exercise (0-indexed)
+  setIndex Int @map("set_index")
+
+  // Performance data
+  weight Float  // Weight used (in user's preferred unit system)
+  reps   Int    // Reps performed
+
+  // Optional RPE (Rate of Perceived Exertion, 1-10 scale)
+  // Used for RPE-based progression and fatigue tracking
+  rpe Float? @db.DoublePrecision
+
+  // Set flags (PRD 8.5: warmup, backoff, dropset, failure)
+  // Structure: { warmup?: boolean, backoff?: boolean, dropset?: boolean, failure?: boolean }
+  // Flags affect volume calculations and PR detection
+  flags Json @default("{}") @map("flags")
+
+  // Optional notes for this specific set
+  notes String?
+
+  // Unique constraint: each workout exercise can only have one set per index
+  @@unique([workoutExerciseId, setIndex])
+  // Index for efficient lookup
+  @@index([workoutExerciseId])
+  @@map("workout_sets")
 }
