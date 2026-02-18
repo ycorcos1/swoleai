@@ -712,3 +712,58 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `npm run lint` passes with no errors
 - Verified: `npm run build` succeeds — all session modules compile correctly
+
+### Task 4.3 — Mutation queue (push) ✅
+- Created `src/lib/offline/mutations.ts` with mutation queue functions:
+  - **Queue operations**:
+    - `enqueueMutation(type, payload)` — adds a mutation to the pending queue with status 'pending'
+    - `getPendingMutations()` — retrieves all pending mutations sorted by createdAt (oldest first)
+    - `getPendingMutationCount()` — returns count of pending mutations
+    - `getFailedMutations()` — retrieves all failed mutations for retry/inspection
+  - **Status management**:
+    - `markMutationProcessing(id)` — marks mutation as 'processing' (being synced)
+    - `markMutationFailed(id, error)` — marks mutation as 'failed', increments retryCount, stores error
+    - `removeMutation(id)` — deletes successfully synced mutation from queue
+    - `retryMutation(id)` — resets failed mutation to 'pending' for retry
+  - **Cleanup**:
+    - `clearAllMutations()` — clears entire queue (for logout/reset)
+    - `resetProcessingMutations()` — resets stuck 'processing' mutations to 'pending' (app startup recovery)
+- Created `src/lib/offline/sync.ts` with background sync service:
+  - **SyncService class** (singleton pattern):
+    - Listens for browser `online`/`offline` events to detect network state changes
+    - Runs sync loop every 5 seconds (`SYNC_INTERVAL_MS = 5000`)
+    - Processes mutations in order (FIFO) to maintain consistency
+    - Max 3 retries per mutation (`MAX_RETRIES = 3`) before marking as permanently failed
+  - **SyncState interface**: `status`, `pendingCount`, `lastSyncAt`, `lastError`, `isOnline`
+  - **SyncStatus type**: 'synced' | 'pending' | 'syncing' | 'offline' | 'error'
+  - **Key methods**:
+    - `initialize()` — sets up event listeners and starts sync loop (idempotent)
+    - `destroy()` — cleanup for unmount
+    - `subscribe(listener)` — reactive state updates
+    - `triggerSync()` — force immediate sync attempt
+    - `notifyMutationAdded()` — triggers immediate sync when new mutation added while online
+  - **Mutation execution**:
+    - Maps mutation types to API endpoints and HTTP methods
+    - Builds URLs with path parameters from payload (sessionId, setId, exerciseId)
+    - Handles network errors gracefully, stops processing on connectivity issues
+- Created `src/lib/offline/useSync.ts` React hook:
+  - `useSync()` hook returns: `status`, `pendingCount`, `isOnline`, `lastSyncAt`, `lastError`, `syncState`, `triggerSync`
+  - Initializes sync service on mount, subscribes to state changes
+  - Provides reactive updates when sync status changes
+- Updated `src/lib/offline/useActiveSession.ts` to enqueue mutations:
+  - `startSession` → enqueues `START_SESSION` mutation
+  - `endSession` → enqueues `END_SESSION` mutation (if serverSessionId exists)
+  - `addExercise` → enqueues `ADD_EXERCISE` mutation
+  - `removeExercise` → enqueues `REMOVE_EXERCISE` mutation
+  - `logSet` → enqueues `LOG_SET` mutation with exerciseId, weight, reps, rpe, flags, notes
+  - `updateSet` → enqueues `UPDATE_SET` mutation
+  - `removeSet` → enqueues `DELETE_SET` mutation
+  - `updateSessionMeta` → enqueues `UPDATE_SESSION_NOTES` mutation
+  - All operations call `syncService.notifyMutationAdded()` to trigger immediate sync if online
+- Updated `src/lib/offline/index.ts` with new exports:
+  - Mutation functions: `enqueueMutation`, `getPendingMutations`, `getPendingMutationCount`, `getFailedMutations`, `markMutationProcessing`, `markMutationFailed`, `removeMutation`, `retryMutation`, `clearAllMutations`, `resetProcessingMutations`
+  - Sync exports: `syncService`, types `SyncStatus`, `SyncState`
+  - Hook: `useSync`, type `UseSyncReturn`
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npm run lint` passes with no errors
+- Verified: `npm run build` succeeds — all sync modules compile correctly

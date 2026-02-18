@@ -37,3 +37,23 @@ export type { UseActiveSessionReturn, StartSessionOptions } from './useActiveSes
 
 // Session context provider (Task 4.2)
 export { ActiveSessionProvider, useActiveSessionContext } from './ActiveSessionProvider';
+
+// Mutation queue functions (Task 4.3)
+export {
+  enqueueMutation,
+  getPendingMutations,
+  getPendingMutationCount,
+  getFailedMutations,
+  markMutationProcessing,
+  markMutationFailed,
+  removeMutation,
+  retryMutation,
+  clearAllMutations,
+  resetProcessingMutations,
+} from './mutations';
+
+// Sync service and hook (Task 4.3)
+export { syncService } from './sync';
+export type { SyncStatus, SyncState } from './sync';
+export { useSync } from './useSync';
+export type { UseSyncReturn } from './useSync';

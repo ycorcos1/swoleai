@@ -26,6 +26,8 @@ import {
   updateSetInExercise,
   removeSetFromExercise,
 } from './session';
+import { enqueueMutation } from './mutations';
+import { syncService } from './sync';
 
 // =============================================================================
 // TYPES
@@ -139,13 +141,24 @@ export function useActiveSession(): UseActiveSessionReturn {
           })
         );
 
+        const startedAt = new Date();
+
         await saveActiveSession({
-          startedAt: new Date(),
+          startedAt,
           splitId: options.splitId,
           templateId: options.templateId,
           title: options.title,
           exercises: initialExercises,
         });
+
+        // Enqueue mutation for server sync
+        await enqueueMutation('START_SESSION', {
+          splitId: options.splitId,
+          templateId: options.templateId,
+          title: options.title,
+          startedAt: startedAt.toISOString(),
+        });
+        await syncService.notifyMutationAdded();
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to start session');
         if (mountedRef.current) {
@@ -160,7 +173,21 @@ export function useActiveSession(): UseActiveSessionReturn {
   const endSession = useCallback(async (): Promise<void> => {
     try {
       setError(null);
+
+      // Get the session before clearing to get server ID
+      const current = await getActiveSession();
+      const serverSessionId = current?.serverSessionId;
+
       await clearActiveSession();
+
+      // Enqueue mutation for server sync (only if we have a server session ID)
+      if (serverSessionId) {
+        await enqueueMutation('END_SESSION', {
+          sessionId: serverSessionId,
+          status: 'COMPLETED',
+        });
+        await syncService.notifyMutationAdded();
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to end session');
       if (mountedRef.current) {
@@ -186,6 +213,16 @@ export function useActiveSession(): UseActiveSessionReturn {
           orderIndex,
           sets: [],
         });
+
+        // Enqueue mutation for server sync (only if we have a server session ID)
+        if (current?.serverSessionId) {
+          await enqueueMutation('ADD_EXERCISE', {
+            sessionId: current.serverSessionId,
+            exerciseId: exercise.exerciseId,
+            localId: exercise.localId,
+          });
+          await syncService.notifyMutationAdded();
+        }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to add exercise');
         if (mountedRef.current) {
@@ -200,7 +237,18 @@ export function useActiveSession(): UseActiveSessionReturn {
   const removeExercise = useCallback(async (localId: string): Promise<void> => {
     try {
       setError(null);
+      const current = await getActiveSession();
+
       await removeExerciseFromSession(localId);
+
+      // Enqueue mutation for server sync (only if we have a server session ID)
+      if (current?.serverSessionId) {
+        await enqueueMutation('REMOVE_EXERCISE', {
+          sessionId: current.serverSessionId,
+          localId,
+        });
+        await syncService.notifyMutationAdded();
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to remove exercise');
       if (mountedRef.current) {
@@ -243,12 +291,28 @@ export function useActiveSession(): UseActiveSessionReturn {
         const current = await getActiveSession();
         const exercise = current?.exercises.find((e) => e.localId === exerciseLocalId);
         const setIndex = exercise?.sets.length ?? 0;
+        const loggedAt = new Date();
 
         await addSetToExercise(exerciseLocalId, {
           ...set,
           setIndex,
-          loggedAt: new Date(),
+          loggedAt,
         });
+
+        // Enqueue mutation for server sync (only if we have a server session ID)
+        if (current?.serverSessionId && exercise) {
+          await enqueueMutation('LOG_SET', {
+            sessionId: current.serverSessionId,
+            exerciseId: exercise.exerciseId,
+            localSetId: set.localId,
+            weight: set.weight,
+            reps: set.reps,
+            rpe: set.rpe,
+            flags: set.flags,
+            notes: set.notes,
+          });
+          await syncService.notifyMutationAdded();
+        }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to log set');
         if (mountedRef.current) {
@@ -268,7 +332,19 @@ export function useActiveSession(): UseActiveSessionReturn {
     ): Promise<void> => {
       try {
         setError(null);
+        const current = await getActiveSession();
+
         await updateSetInExercise(exerciseLocalId, setLocalId, updates);
+
+        // Enqueue mutation for server sync (only if we have a server session ID)
+        if (current?.serverSessionId) {
+          await enqueueMutation('UPDATE_SET', {
+            sessionId: current.serverSessionId,
+            localSetId: setLocalId,
+            ...updates,
+          });
+          await syncService.notifyMutationAdded();
+        }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to update set');
         if (mountedRef.current) {
@@ -284,7 +360,18 @@ export function useActiveSession(): UseActiveSessionReturn {
     async (exerciseLocalId: string, setLocalId: string): Promise<void> => {
       try {
         setError(null);
+        const current = await getActiveSession();
+
         await removeSetFromExercise(exerciseLocalId, setLocalId);
+
+        // Enqueue mutation for server sync (only if we have a server session ID)
+        if (current?.serverSessionId) {
+          await enqueueMutation('DELETE_SET', {
+            sessionId: current.serverSessionId,
+            localSetId: setLocalId,
+          });
+          await syncService.notifyMutationAdded();
+        }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to remove set');
         if (mountedRef.current) {
@@ -318,6 +405,15 @@ export function useActiveSession(): UseActiveSessionReturn {
           ...updates,
           updatedAt: new Date(),
         });
+
+        // Enqueue mutation for server sync (only if we have a server session ID)
+        if (current.serverSessionId) {
+          await enqueueMutation('UPDATE_SESSION_NOTES', {
+            sessionId: current.serverSessionId,
+            ...updates,
+          });
+          await syncService.notifyMutationAdded();
+        }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to update session');
         if (mountedRef.current) {
