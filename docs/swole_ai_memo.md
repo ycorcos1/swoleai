@@ -187,3 +187,40 @@
 - Migration file: `prisma/migrations/20260218000328_init/migration.sql`
 - Verified: `prisma migrate status` shows "Database schema is up to date!"
 - Note: Full User model fields (profile, constraints, etc.) will be added in Task 2.2
+
+### Task 2.2 — Add core tables: users + profile fields ✅
+- Extended `User` model in `prisma/schema.prisma` with profile fields from PRD 8.2 (Onboarding Wizard):
+  - `goalMode` (enum: HYPERTROPHY, STRENGTH, HYBRID)
+  - `daysPerWeek` (Int, nullable)
+  - `sessionMinutes` (Int, nullable)
+  - `units` (enum: METRIC, IMPERIAL, default IMPERIAL)
+  - `equipment` (enum: COMMERCIAL, HOME, default COMMERCIAL)
+  - `constraints` (Json, default `{}` — structure: injuries, avoidExercises, mustHaveExercises arrays)
+  - `onboardingComplete` (Boolean, default false)
+  - `password` (String, nullable — for credentials auth)
+- Created three Prisma enums: `GoalMode`, `UnitSystem`, `EquipmentAccess`
+- Migration file: `prisma/migrations/20260218000528_add_user_profile_fields/migration.sql`
+- Ran `prisma migrate dev --name add_user_profile_fields` → migration applied successfully
+- Verified: `prisma db pull --print` confirms all profile fields exist in Neon DB
+- Verified: `tsc --noEmit` passes with no errors
+
+### Task 2.3 — Add exercises + favorites schema ✅
+- Added `Exercise` model in `prisma/schema.prisma` with all required tags:
+  - `name` (String)
+  - `type` (enum: BARBELL, DUMBBELL, MACHINE, CABLE, BODYWEIGHT, OTHER)
+  - `pattern` (enum: HORIZONTAL_PUSH, HORIZONTAL_PULL, VERTICAL_PUSH, VERTICAL_PULL, HIP_HINGE, SQUAT, LUNGE, ISOLATION, CARRY, CORE, OTHER)
+  - `muscleGroups` (Json, default `[]` — array of muscle group strings)
+  - `equipmentTags` (Json, default `[]` — array of equipment strings)
+  - `jointStressFlags` (Json, default `{}` — object mapping joint to stress level)
+  - `isCustom` (Boolean, default false) + `ownerUserId` (nullable) for user-created exercises
+- Added `Favorite` model linking users to exercises:
+  - `userId` + `exerciseId` with `@@unique` constraint for idempotent favorites
+  - `priority` (enum: PRIMARY, BACKUP) for slot-filling preference
+  - `tags` (Json, default `[]`) for organization
+- Created three new enums: `ExerciseType`, `MovementPattern`, `FavoritePriority`
+- Added relations: User → exercises (custom), User → favorites, Exercise → favorites
+- Added indexes for efficient queries: `[ownerUserId, isCustom]` on exercises, `[userId]` on favorites
+- Migration file: `prisma/migrations/20260218000710_add_exercises_and_favorites/migration.sql`
+- Ran `prisma migrate dev --name add_exercises_and_favorites` → migration applied successfully
+- Verified: Migration SQL includes `CREATE UNIQUE INDEX "favorites_user_id_exercise_id_key"` enforcing unique constraint
+- Verified: `tsc --noEmit` passes with no errors

@@ -30,6 +30,40 @@ enum EquipmentAccess {
   HOME
 }
 
+// Exercise type enum (Task 2.3)
+// Represents the equipment/style of the exercise
+enum ExerciseType {
+  BARBELL
+  DUMBBELL
+  MACHINE
+  CABLE
+  BODYWEIGHT
+  OTHER
+}
+
+// Movement pattern enum (Task 2.3)
+// Used for substitution matching and volume tracking
+enum MovementPattern {
+  HORIZONTAL_PUSH
+  HORIZONTAL_PULL
+  VERTICAL_PUSH
+  VERTICAL_PULL
+  HIP_HINGE
+  SQUAT
+  LUNGE
+  ISOLATION
+  CARRY
+  CORE
+  OTHER
+}
+
+// Favorite priority enum (Task 2.3)
+// Distinguishes primary exercises from backups for slot filling
+enum FavoritePriority {
+  PRIMARY
+  BACKUP
+}
+
 // =============================================================================
 // CORE MODELS
 // =============================================================================
@@ -57,5 +91,81 @@ model User {
   // Onboarding completion flag
   onboardingComplete Boolean @default(false) @map("onboarding_complete")
 
+  // Relations (Task 2.3)
+  exercises Exercise[] // Custom exercises owned by this user
+  favorites Favorite[] // User's favorite exercises
+
   @@map("users")
+}
+
+// =============================================================================
+// EXERCISE + FAVORITES (Task 2.3)
+// =============================================================================
+
+// Exercise model (Task 2.3)
+// Contains both system exercises and user-created custom exercises
+// Tags: muscle_groups, pattern, equipment_tags, stress_flags
+model Exercise {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Exercise classification
+  type    ExerciseType    @default(OTHER)
+  pattern MovementPattern @default(OTHER)
+
+  // Muscle groups targeted (e.g., ["chest", "triceps", "front_delts"])
+  // Primary and secondary muscle groups for volume tracking
+  muscleGroups Json @default("[]") @map("muscle_groups")
+
+  // Equipment tags (e.g., ["barbell", "bench", "rack"])
+  // Used for equipment availability filtering
+  equipmentTags Json @default("[]") @map("equipment_tags")
+
+  // Joint stress flags for injury/constraint matching
+  // (e.g., {"shoulder": "high", "lower_back": "medium"})
+  jointStressFlags Json @default("{}") @map("joint_stress_flags")
+
+  // Custom exercise ownership
+  // If isCustom is true, ownerUserId points to the creating user
+  // System exercises have isCustom=false and ownerUserId=null
+  isCustom    Boolean @default(false) @map("is_custom")
+  ownerUserId String? @map("owner_user_id")
+  owner       User?   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  // Relations
+  favorites Favorite[]
+
+  // Index for efficient lookups of user's custom exercises
+  @@index([ownerUserId, isCustom])
+  @@map("exercises")
+}
+
+// Favorite model (Task 2.3)
+// Links a user to their favorite exercises with priority
+// Used for slot-filling (favorites first) and quick access
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // User who favorited the exercise
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The favorited exercise
+  exerciseId String   @map("exercise_id")
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  // Priority for slot filling (PRIMARY exercises chosen before BACKUP)
+  priority FavoritePriority @default(PRIMARY)
+
+  // Optional tags for organization (e.g., ["chest_day", "push"])
+  tags Json @default("[]")
+
+  // Unique constraint: each user can only favorite an exercise once
+  @@unique([userId, exerciseId])
+  // Index for efficient lookup of user's favorites
+  @@index([userId])
+  @@map("favorites")
 }
