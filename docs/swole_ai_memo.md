@@ -639,3 +639,41 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route file
 - Verified: `npm run build` succeeds with `/api/history` registered as dynamic route
+
+### Task 4.1 — Add IndexedDB schema (Dexie) ✅
+- Created `src/lib/offline/db.ts` with Dexie IndexedDB database schema:
+  - Database class `SwoleAIDatabase` extends Dexie with name 'SwoleAI'
+  - Schema version 1 with three tables for offline-first workout logging
+- **`activeSession` table**:
+  - Primary key: `id` (always 'current' — singleton pattern for one active session)
+  - `ActiveSession` interface with fields:
+    - `id`, `serverSessionId` (optional), `startedAt` (Date)
+    - `splitId`, `templateId`, `title`, `notes` (all optional)
+    - `constraintFlags` (optional object: pain[], equipmentCrowded, lowEnergy)
+    - `exercises` (array of `ActiveSessionExercise` with nested `ActiveSessionSet` arrays)
+    - `updatedAt` (Date — for conflict detection)
+  - `ActiveSessionExercise` interface: localId, exerciseId, exerciseName, orderIndex, notes, sets[]
+  - `ActiveSessionSet` interface: localId, setIndex, weight, reps, rpe, flags, notes, loggedAt
+- **`setEvents` table** (append-only event log):
+  - Primary key: `++id` (auto-incremented)
+  - Indexes: `serverSessionId`, `synced`, `timestamp`, `localExerciseId`
+  - `SetEvent` interface with fields:
+    - `id`, `serverSessionId`, `localExerciseId`
+    - `eventType` enum: 'SET_LOGGED' | 'SET_UPDATED' | 'SET_DELETED'
+    - `payload` object containing set data (localSetId, setIndex, weight, reps, rpe, flags, notes)
+    - `timestamp` (Date), `synced` (boolean)
+  - Used for event sourcing — can reconstruct session state from events
+- **`pendingMutations` table** (sync queue):
+  - Primary key: `++id` (auto-incremented)
+  - Indexes: `status`, `createdAt`, `type`
+  - `PendingMutation` interface with fields:
+    - `id`, `type` (MutationType enum), `payload` (Record<string, unknown>)
+    - `createdAt` (Date), `retryCount` (number), `lastError` (optional string)
+    - `status` enum: 'pending' | 'processing' | 'failed'
+  - `MutationType` union: START_SESSION, END_SESSION, LOG_SET, UPDATE_SET, DELETE_SET, ADD_EXERCISE, REMOVE_EXERCISE, REORDER_EXERCISES, UPDATE_SESSION_NOTES
+- Created `src/lib/offline/index.ts` exporting:
+  - `db` (singleton database instance), `SwoleAIDatabase` class
+  - All type interfaces: `ActiveSession`, `ActiveSessionExercise`, `ActiveSessionSet`, `SetEvent`, `PendingMutation`, `MutationType`
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npm run lint` passes with no errors
+- Verified: `npm run build` succeeds — database module compiles correctly
