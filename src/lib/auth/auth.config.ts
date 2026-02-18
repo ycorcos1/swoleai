@@ -88,7 +88,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === 'development',
+  debug: true, // Enable debug for troubleshooting
 };
 
 // Helper function to create a new user (signup)

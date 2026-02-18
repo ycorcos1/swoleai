@@ -63,11 +63,20 @@ export default function LoginPage() {
     setErrors((prev) => ({ ...prev, general: undefined }));
     
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
+      // Create a timeout promise
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Login timeout')), 15000);
       });
+
+      // Race between signIn and timeout
+      const result = await Promise.race([
+        signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        }),
+        timeoutPromise,
+      ]);
 
       if (!result) {
         setErrors((prev) => ({ ...prev, general: 'Login request failed. Please try again.' }));
@@ -82,16 +91,18 @@ export default function LoginPage() {
       }
 
       if (result.ok) {
-        // Successful login - redirect to dashboard
-        router.push('/app/dashboard');
-        router.refresh();
+        // Successful login - use window.location for reliable redirect
+        window.location.href = '/app/dashboard';
       } else {
         setErrors((prev) => ({ ...prev, general: 'Login failed. Please try again.' }));
         setIsSubmitting(false);
       }
     } catch (error) {
       console.error('Login error:', error);
-      setErrors((prev) => ({ ...prev, general: 'Something went wrong. Please try again.' }));
+      const message = error instanceof Error && error.message === 'Login timeout'
+        ? 'Login timed out. Please try again.'
+        : 'Something went wrong. Please try again.';
+      setErrors((prev) => ({ ...prev, general: message }));
       setIsSubmitting(false);
     }
   };
