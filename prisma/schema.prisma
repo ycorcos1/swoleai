@@ -101,6 +101,14 @@ enum SessionStatus {
   ABANDONED // Left incomplete (app closed, user quit)
 }
 
+// Proposal status enum (Task 2.7)
+// Tracks the lifecycle of coach proposals and routine changes
+enum ProposalStatus {
+  PENDING  // Awaiting user review
+  ACCEPTED // User accepted the proposal
+  REJECTED // User rejected the proposal
+}
+
 // =============================================================================
 // CORE MODELS
 // =============================================================================
@@ -140,6 +148,11 @@ model User {
 
   // Relations (Task 2.6)
   workoutSessions WorkoutSession[] // User's workout session logs
+
+  // Relations (Task 2.7)
+  programBlocks     ProgramBlock[]     // User's training program blocks
+  routineVersions   RoutineVersion[]   // User's routine version snapshots
+  routineChangeLogs RoutineChangeLog[] // User's routine change history
 
   @@map("users")
 }
@@ -557,4 +570,123 @@ model WorkoutSet {
   // Index for efficient lookup
   @@index([workoutExerciseId])
   @@map("workout_sets")
+}
+
+// =============================================================================
+// VERSIONING SCHEMA (Task 2.7)
+// =============================================================================
+
+// ProgramBlock model (Task 2.7)
+// Represents a training program phase (e.g., "Hypertrophy Block", "Strength Phase")
+// Used for organizing routine versions and tracking training periods
+model ProgramBlock {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Block name (e.g., "Hypertrophy Block 1", "Strength Phase", "Peaking")
+  name String
+
+  // Block date range
+  // startDate: when this block begins
+  // endDate: when this block ends (nullable for ongoing blocks)
+  startDate DateTime  @map("start_date")
+  endDate   DateTime? @map("end_date")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations
+  routineVersions RoutineVersion[] // Versions created during this block
+
+  // Index for efficient lookup of user's program blocks
+  @@index([userId])
+  @@index([userId, startDate])
+  @@map("program_blocks")
+}
+
+// RoutineVersion model (Task 2.7)
+// Stores a snapshot of the user's routine at a point in time
+// Enables rollback and tracking of routine changes over time
+model RoutineVersion {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Optional link to program block (training phase context)
+  programBlockId String?       @map("program_block_id")
+  programBlock   ProgramBlock? @relation(fields: [programBlockId], references: [id], onDelete: SetNull)
+
+  // Human-readable changelog entry describing what changed
+  // e.g., "Accepted weekly check-in: swapped bench for incline press"
+  changelog String?
+
+  // Version number within user's routine history (auto-incremented)
+  // Helps with ordering and identification
+  versionNumber Int @map("version_number")
+
+  // Snapshot of the complete routine state at this version
+  // Structure: {
+  //   splitId: string,
+  //   splitName: string,
+  //   scheduleDays: Array<{ weekday, templateId?, isRest, label? }>,
+  //   templates: Array<{ id, name, mode, blocks/slots }>,
+  //   favoriteIds: string[]
+  // }
+  // This denormalized snapshot enables reliable rollback even if
+  // the underlying templates/splits are modified or deleted
+  snapshotJson Json @map("snapshot_json")
+
+  // Relations for change log tracking
+  changeLogsFrom RoutineChangeLog[] @relation("FromVersion") // Changes FROM this version
+  changeLogsTo   RoutineChangeLog[] @relation("ToVersion")   // Changes TO this version
+
+  // Index for efficient lookup of user's versions
+  @@index([userId])
+  @@index([userId, versionNumber])
+  @@index([programBlockId])
+  @@map("routine_versions")
+}
+
+// RoutineChangeLog model (Task 2.7)
+// Records the specific changes made between routine versions
+// Can be linked to a coach proposal if the change was AI-initiated
+model RoutineChangeLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Version transition (from → to)
+  fromVersionId String         @map("from_version_id")
+  fromVersion   RoutineVersion @relation("FromVersion", fields: [fromVersionId], references: [id], onDelete: Cascade)
+
+  toVersionId String         @map("to_version_id")
+  toVersion   RoutineVersion @relation("ToVersion", fields: [toVersionId], references: [id], onDelete: Cascade)
+
+  // Optional link to the coach proposal that triggered this change
+  // Nullable for manual user-initiated changes
+  proposalId String? @map("proposal_id")
+
+  // Patch operations describing the exact changes made
+  // Structure: Array of JSON Patch operations (RFC 6902)
+  // e.g., [
+  //   { "op": "replace", "path": "/templates/0/blocks/2/exerciseId", "value": "new_ex_id" },
+  //   { "op": "add", "path": "/templates/0/blocks/-", "value": { ... } }
+  // ]
+  // Used for displaying diffs and understanding what changed
+  patchOpsJson Json @map("patch_ops_json")
+
+  // Index for efficient lookup
+  @@index([userId])
+  @@index([fromVersionId])
+  @@index([toVersionId])
+  @@index([proposalId])
+  @@map("routine_change_logs")
 }
