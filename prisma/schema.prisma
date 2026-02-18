@@ -1,0 +1,22 @@
+// Prisma schema for SwoleAI
+// Using Neon Postgres as the database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Minimal User model to verify Prisma + Neon connection
+// Full schema will be added in subsequent tasks (2.2+)
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}

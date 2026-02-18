@@ -166,3 +166,24 @@
 - Added `bcryptjs` + `@types/bcryptjs` dependencies
 - Note: In-memory user store used for development; will be replaced with Prisma DB in Task 2.x
 - Build verified: all routes compile, TypeScript passes, lint clean
+
+### Task 1.6 — Add auth middleware to protect `/app/*` ✅
+- Created `src/middleware.ts` with route protection for `/app/*` paths
+- Uses `getToken` from `next-auth/jwt` to check for valid session token
+- Unauthenticated users redirected to `/login` with `callbackUrl` query param preserved
+- Middleware matcher configured for `/app/:path*` pattern only
+- Build verified: middleware registered as "ƒ Proxy (Middleware)" in Next.js build output
+- TypeScript passes, ESLint clean
+- Note: Next.js 16 shows deprecation warning for "middleware" in favor of "proxy" convention, but middleware still functions correctly
+
+### Task 2.1 — Initialize Prisma + connect to Neon ✅
+- Created `prisma/schema.prisma` with PostgreSQL datasource pointing to `DATABASE_URL` env var
+- Configured generator for `prisma-client-js`
+- Added minimal `User` model (id, email, createdAt, updatedAt) to verify connection
+- Model uses `@@map("users")` for snake_case table naming
+- Created `src/lib/db/prisma.ts` with Prisma client singleton pattern (prevents hot-reload connection exhaustion)
+- Created `src/lib/db/index.ts` barrel export for convenient imports
+- Ran `prisma migrate dev --name init` → migration applied successfully to Neon Postgres
+- Migration file: `prisma/migrations/20260218000328_init/migration.sql`
+- Verified: `prisma migrate status` shows "Database schema is up to date!"
+- Note: Full User model fields (profile, constraints, etc.) will be added in Task 2.2
