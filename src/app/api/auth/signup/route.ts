@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const { email, password } = result.data;
 
     // Check if user already exists
-    if (userExists(email)) {
+    if (await userExists(email)) {
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 409 }
