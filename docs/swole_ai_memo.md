@@ -677,3 +677,38 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `npm run lint` passes with no errors
 - Verified: `npm run build` succeeds — database module compiles correctly
+
+### Task 4.2 — Active session persistence (continue workout) ✅
+- Created `src/lib/offline/session.ts` with session persistence functions:
+  - **Core functions**:
+    - `saveActiveSession(session)` — saves session state to IndexedDB (overwrites existing, sets `id: 'current'` and `updatedAt`)
+    - `getActiveSession()` — retrieves the current active session from IndexedDB
+    - `hasActiveSession()` — checks if an active session exists (returns boolean)
+    - `clearActiveSession()` — deletes the active session (called when workout ends)
+    - `updateActiveSession(updates)` — partial updates to active session fields
+  - **Exercise management**:
+    - `addExerciseToSession(exercise)` — adds exercise with auto-assigned orderIndex
+    - `removeExerciseFromSession(localId)` — removes exercise and reindexes remaining
+    - `updateExerciseInSession(localId, updates)` — updates exercise fields
+  - **Set management**:
+    - `addSetToExercise(exerciseLocalId, set)` — adds set to exercise
+    - `updateSetInExercise(exerciseLocalId, setLocalId, updates)` — updates set fields
+    - `removeSetFromExercise(exerciseLocalId, setLocalId)` — removes set and reindexes
+- Created `src/lib/offline/useActiveSession.ts` React hook:
+  - Uses Dexie's `useLiveQuery` for reactive session restoration on app reload
+  - Automatically queries `db.activeSession.get('current')` on mount — restores any persisted session
+  - Provides state: `session` (ActiveSession | undefined | null), `isLoading`, `error`
+  - Provides mutation functions: `startSession`, `endSession`, `addExercise`, `removeExercise`, `updateExercise`, `logSet`, `updateSet`, `removeSet`, `updateSessionMeta`
+  - `StartSessionOptions` interface: splitId, templateId, title, initialExercises (all optional)
+  - Error handling with `mountedRef` to prevent state updates after unmount
+- Created `src/lib/offline/ActiveSessionProvider.tsx` context provider:
+  - Wraps app to provide session state to all children via React Context
+  - `useActiveSessionContext()` hook for consuming session state (throws if used outside provider)
+  - Enables any component to access session state without prop drilling
+- Updated `src/lib/offline/index.ts` with new exports:
+  - Session functions: `saveActiveSession`, `getActiveSession`, `hasActiveSession`, `clearActiveSession`, `updateActiveSession`, exercise/set management functions
+  - Hook: `useActiveSession`, types `UseActiveSessionReturn`, `StartSessionOptions`
+  - Provider: `ActiveSessionProvider`, `useActiveSessionContext`
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npm run lint` passes with no errors
+- Verified: `npm run build` succeeds — all session modules compile correctly
