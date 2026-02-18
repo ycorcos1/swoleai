@@ -579,3 +579,34 @@
   - 404 Not Found if session or exercise doesn't exist or isn't accessible
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route file
+
+### Task 3.9 — Workouts API: end session ✅
+- Created `src/app/api/workouts/[id]/end/route.ts` with end session endpoint:
+  - `POST /api/workouts/:id/end` — ends a workout session and records the end time
+- Endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body (all optional):
+    - `notes` (optional String) — final session notes
+    - `status` (optional enum: 'COMPLETED', 'ABANDONED') — defaults to COMPLETED
+  - Allows empty request body for default completion
+  - Validates that session exists and belongs to authenticated user (404 if not found)
+  - Validates that session is ACTIVE (400 if already COMPLETED or ABANDONED)
+- Session ending behavior:
+  - Sets `endedAt` to current timestamp (`new Date()`)
+  - Updates `status` to COMPLETED (default) or ABANDONED if explicitly specified
+  - Merges final notes if provided (replaces existing notes)
+  - Returns full session object with related split/template data
+- Response structure:
+  - `session` — the updated WorkoutSession object including:
+    - id, startedAt, endedAt, status, title, notes, constraintFlags, splitId, templateId, createdAt, updatedAt
+    - `split` relation (id, name) if session had a splitId
+    - `template` relation (id, name, mode) if session had a templateId
+    - `exercises` array with exercise summaries and set counts
+    - `durationMinutes` — calculated session duration in minutes
+  - `message` — success message based on status (completed/abandoned)
+- Error responses:
+  - 401 Unauthorized if not authenticated
+  - 400 Bad Request if validation fails or session is already ended
+  - 404 Not Found if session doesn't exist or doesn't belong to user
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route file (`npx eslint src/app/api/workouts/[id]/end/route.ts`)
