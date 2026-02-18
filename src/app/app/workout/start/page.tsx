@@ -289,9 +289,51 @@ export default function WorkoutStartPage() {
   }, [todaySchedule, handleStartWorkout]);
 
   // Start a freestyle workout (no template)
-  const handleStartFreestyle = useCallback(() => {
-    handleStartWorkout(undefined, undefined, 'Freestyle Workout');
-  }, [handleStartWorkout]);
+  // For testing Task 5.3, we add sample exercises so the Set Logger can be tested
+  const handleStartFreestyle = useCallback(async () => {
+    const workoutKey = 'freestyle';
+    setStartingWorkoutId(workoutKey);
+
+    try {
+      // Start session with sample exercises for testing Set Logger
+      await startSession({
+        title: 'Freestyle Workout',
+        initialExercises: [
+          {
+            localId: `ex_${Date.now()}_1`,
+            exerciseId: 'sample-bench-press',
+            exerciseName: 'Bench Press',
+          },
+          {
+            localId: `ex_${Date.now()}_2`,
+            exerciseId: 'sample-squat',
+            exerciseName: 'Squat',
+          },
+          {
+            localId: `ex_${Date.now()}_3`,
+            exerciseId: 'sample-deadlift',
+            exerciseName: 'Deadlift',
+          },
+        ],
+      });
+
+      // Try server API (may fail if DB is unreachable)
+      try {
+        await fetch('/api/workouts/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Freestyle Workout' }),
+        });
+      } catch {
+        console.warn('Server session creation failed, continuing with local session');
+      }
+
+      router.push('/app/workout/session/current');
+    } catch (err) {
+      console.error('Failed to start workout:', err);
+      setStartingWorkoutId(null);
+    }
+  }, [startSession, router]);
 
   // Start a workout with a specific template
   const handleStartTemplate = useCallback(

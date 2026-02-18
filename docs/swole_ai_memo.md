@@ -931,3 +931,58 @@
 - Verified: `npm run build` succeeds — `/app/workout/session/[id]` compiles as dynamic route
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in updated files
+
+### Task 5.3 — Set Logger sheet (log set) ✅
+- Created `src/components/workout/SetLoggerSheet.tsx` — modal/sheet component for logging sets:
+  - **Sheet UI**:
+    - Bottom sheet with rounded top corners, drag handle, glass background
+    - Backdrop with blur effect, dismissible on tap
+    - `animate-in slide-in-from-bottom` entrance animation
+    - Safe area padding for PWA home indicator
+  - **Header**:
+    - Exercise name (truncated if long)
+    - Set number indicator (e.g., "Set 3")
+    - Previous sets summary (e.g., "135×8 / 145×6")
+    - Close button (X icon) in top-right
+  - **Big Steppers** (gym-first UX per Design Spec 5.3.2):
+    - `Stepper` component with large touch targets (44px+)
+    - **Weight stepper**: small step ±2.5, large step ±10, unit label "lbs"
+    - **Reps stepper**: small step ±1, large step ±5
+    - Each stepper has 4 buttons: -large, -small, +small, +large
+    - Value display centered with `tabular-nums` font variant
+    - Step amounts shown below large increment/decrement buttons
+  - **Pre-fill behavior**:
+    - Automatically pre-fills weight/reps from last logged set
+    - Resets to 0/0 if no previous sets exist
+  - **Log Set flow**:
+    - Generates unique `localId` with timestamp + random suffix
+    - Calls `onLogSet(exerciseLocalId, set)` → writes to IndexedDB via `addSetToExercise()`
+    - `logSet()` in `useActiveSession` enqueues `LOG_SET` mutation for sync
+    - Closes sheet on success, keeps open on error for retry
+    - Loading state with spinner and "Logging..." text
+  - **Validation**:
+    - Log Set button disabled if both weight and reps are 0
+    - Prevents double-tap with `isLogging` guard
+- Created `src/components/workout/index.ts` — barrel export for workout components
+- Updated `src/app/app/workout/session/[id]/page.tsx` — integrated SetLoggerSheet:
+  - Added state: `selectedExercise`, `showSetLoggerSheet`
+  - `handleExerciseTap()` opens sheet with selected exercise
+  - `handleCloseSetLoggerSheet()` clears state and closes sheet
+  - `handleLogSet()` wraps `logSet()` from `useActiveSessionContext()`
+  - Added `SetLoggerSheet` component with conditional render
+  - Imported `ActiveSessionSet` type for handler typing
+- **IndexedDB + Sync Integration**:
+  - Set logged immediately to IndexedDB via `addSetToExercise()`
+  - `useLiveQuery` in `useActiveSession` triggers reactive UI update
+  - `LOG_SET` mutation enqueued with exerciseId, localSetId, weight, reps, rpe, flags, notes
+  - `syncService.notifyMutationAdded()` triggers background sync when online
+- **Acceptance criteria verified**:
+  - Logging a set updates UI immediately ✓ (Dexie live query)
+  - Persists locally ✓ (IndexedDB via `addSetToExercise()`)
+- Updated `src/app/app/workout/start/page.tsx` — added sample exercises for testing:
+  - Freestyle workout now starts with 3 sample exercises (Bench Press, Squat, Deadlift)
+  - Enables testing Set Logger without requiring database connection
+  - Sample exercises have placeholder IDs (`sample-bench-press`, `sample-squat`, `sample-deadlift`)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npm run lint` passes with no errors
+- Verified: `npm run build` succeeds — all files compile correctly

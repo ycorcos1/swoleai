@@ -33,7 +33,8 @@ import {
   Clock,
   TrendingUp,
 } from 'lucide-react';
-import type { ActiveSessionExercise } from '@/lib/offline';
+import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
+import { SetLoggerSheet } from '@/components/workout';
 
 // =============================================================================
 // TYPES
@@ -308,12 +309,17 @@ function EmptyExerciseState({ onAddExercise }: { onAddExercise: () => void }) {
 export default function WorkoutSessionPage() {
   const params = useParams();
   const router = useRouter();
-  const sessionId = params.id as string;
-  const { session, isLoading, endSession } = useActiveSessionContext();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const sessionId = params.id as string; // Will be used for deep-linking in future tasks
+  const { session, isLoading, endSession, logSet } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  
+  // Set Logger sheet state
+  const [selectedExercise, setSelectedExercise] = useState<ActiveSessionExercise | null>(null);
+  const [showSetLoggerSheet, setShowSetLoggerSheet] = useState(false);
 
   // =============================================================================
   // HANDLERS
@@ -350,9 +356,24 @@ export default function WorkoutSessionPage() {
   }, [endSession, router]);
 
   const handleExerciseTap = useCallback((exercise: ActiveSessionExercise) => {
-    // TODO: Task 5.3 - Open Set Logger sheet
-    console.log('Exercise tapped:', exercise.exerciseName);
+    setSelectedExercise(exercise);
+    setShowSetLoggerSheet(true);
   }, []);
+
+  const handleCloseSetLoggerSheet = useCallback(() => {
+    setShowSetLoggerSheet(false);
+    setSelectedExercise(null);
+  }, []);
+
+  const handleLogSet = useCallback(
+    async (
+      exerciseLocalId: string,
+      set: Omit<ActiveSessionSet, 'setIndex' | 'loggedAt'>
+    ) => {
+      await logSet(exerciseLocalId, set);
+    },
+    [logSet]
+  );
 
   // =============================================================================
   // RENDER: LOADING STATE
@@ -458,6 +479,16 @@ export default function WorkoutSessionPage() {
         variant="danger"
         isLoading={isEndingWorkout}
       />
+
+      {/* Set Logger Sheet (Task 5.3) */}
+      {selectedExercise && (
+        <SetLoggerSheet
+          isOpen={showSetLoggerSheet}
+          onClose={handleCloseSetLoggerSheet}
+          exercise={selectedExercise}
+          onLogSet={handleLogSet}
+        />
+      )}
     </div>
   );
 }
