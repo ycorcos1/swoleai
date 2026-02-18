@@ -109,6 +109,15 @@ enum ProposalStatus {
   REJECTED // User rejected the proposal
 }
 
+// Coach proposal type enum (Task 2.8)
+// The different types of AI coach proposals
+enum ProposalType {
+  NEXT_SESSION // Next session plan proposal
+  WEEKLY       // Weekly check-in proposal
+  PLATEAU      // Plateau diagnosis/intervention proposal
+  GOALS        // Goals and guardrails review proposal
+}
+
 // =============================================================================
 // CORE MODELS
 // =============================================================================
@@ -153,6 +162,9 @@ model User {
   programBlocks     ProgramBlock[]     // User's training program blocks
   routineVersions   RoutineVersion[]   // User's routine version snapshots
   routineChangeLogs RoutineChangeLog[] // User's routine change history
+
+  // Relations (Task 2.8)
+  coachProposals CoachProposal[] // AI coach proposals for the user
 
   @@map("users")
 }
@@ -670,9 +682,10 @@ model RoutineChangeLog {
   toVersionId String         @map("to_version_id")
   toVersion   RoutineVersion @relation("ToVersion", fields: [toVersionId], references: [id], onDelete: Cascade)
 
-  // Optional link to the coach proposal that triggered this change
+  // Optional link to the coach proposal that triggered this change (Task 2.8)
   // Nullable for manual user-initiated changes
-  proposalId String? @map("proposal_id")
+  proposalId String?        @map("proposal_id")
+  proposal   CoachProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
   // Patch operations describing the exact changes made
   // Structure: Array of JSON Patch operations (RFC 6902)
@@ -689,4 +702,53 @@ model RoutineChangeLog {
   @@index([toVersionId])
   @@index([proposalId])
   @@map("routine_change_logs")
+}
+
+// =============================================================================
+// COACH PROPOSALS (Task 2.8)
+// =============================================================================
+
+// CoachProposal model (Task 2.8)
+// Stores AI-generated proposals from the coach system
+// Types: next_session, weekly check-in, plateau diagnosis, goals review
+// All AI outputs create a proposal with pending status; UI requires explicit accept
+model CoachProposal {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Proposal type (next_session/weekly/plateau/goals)
+  type ProposalType
+
+  // Proposal status lifecycle
+  status ProposalStatus @default(PENDING)
+
+  // Hash of the input data used to generate this proposal
+  // Used for caching/deduplication - if input hasn't changed, can reuse
+  inputSummaryHash String @map("input_summary_hash")
+
+  // The AI-generated proposal content as JSON
+  // Structure varies by type:
+  // - NEXT_SESSION: { exercises: [...], notes: string }
+  // - WEEKLY: { patches: [...], rationale: string, volumeAnalysis: {...} }
+  // - PLATEAU: { diagnosis: string, interventions: [...] }
+  // - GOALS: { goals: [...], guardrails: [...] }
+  proposalJson Json @map("proposal_json")
+
+  // Optional rationale/explanation from AI (for display to user)
+  rationale String?
+
+  // Relations
+  changeLogs RoutineChangeLog[] // Changes triggered by accepting this proposal
+
+  // Index for efficient lookup
+  @@index([userId])
+  @@index([userId, type])
+  @@index([userId, status])
+  @@index([inputSummaryHash])
+  @@map("coach_proposals")
 }

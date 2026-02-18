@@ -313,3 +313,54 @@
 - Set flags persist as JSONB in PostgreSQL, typed as `Prisma.JsonValue` in TypeScript
 - Verified: `prisma migrate status` shows "6 migrations found, Database schema is up to date!"
 - Verified: `tsc --noEmit` passes with no errors
+
+### Task 2.7 — Add versioning schema (program blocks + versions) ✅
+- Added `ProgramBlock` model in `prisma/schema.prisma` representing training program phases:
+  - `name` (String — e.g., "Hypertrophy Block 1", "Strength Phase", "Peaking")
+  - `startDate` (DateTime), `endDate` (nullable DateTime) — block date range
+  - `userId` + `user` relation (cascade delete)
+  - `routineVersions` relation to `RoutineVersion`
+- Added `RoutineVersion` model for storing routine snapshots at points in time:
+  - `userId` + `user` relation (cascade delete)
+  - `programBlockId` + `programBlock` relation (nullable, onDelete: SetNull) — links version to training phase
+  - `changelog` (nullable String — human-readable description of what changed)
+  - `versionNumber` (Int — for ordering and identification)
+  - `snapshotJson` (Json) — denormalized snapshot of complete routine state:
+    - Structure: {splitId, splitName, scheduleDays[], templates[], favoriteIds[]}
+    - Enables reliable rollback even if underlying templates/splits are modified or deleted
+  - `changeLogsFrom` / `changeLogsTo` relations for change tracking
+- Added `RoutineChangeLog` model for recording specific changes between versions:
+  - `userId` + `user` relation (cascade delete)
+  - `fromVersionId` + `fromVersion` relation (cascade delete)
+  - `toVersionId` + `toVersion` relation (cascade delete)
+  - `proposalId` (nullable String — links to coach proposal if AI-initiated)
+  - `patchOpsJson` (Json) — array of JSON Patch operations (RFC 6902) describing exact changes
+- Created `ProposalStatus` enum: PENDING, ACCEPTED, REJECTED (for future Task 2.8)
+- Added relations on User model: `programBlocks`, `routineVersions`, `routineChangeLogs`
+- Added indexes: `[userId]`, `[userId, startDate]` on program_blocks; `[userId]`, `[userId, versionNumber]`, `[programBlockId]` on routine_versions; `[userId]`, `[fromVersionId]`, `[toVersionId]`, `[proposalId]` on routine_change_logs
+- Migration file: `prisma/migrations/20260218002515_add_versioning_schema/migration.sql`
+- Ran `prisma migrate dev --name add_versioning_schema` → migration applied successfully
+- Version snapshot JSON field exists as `snapshotJson Json @map("snapshot_json")` → `"snapshot_json" JSONB NOT NULL` in migration SQL
+- Verified: `prisma migrate status` shows "7 migrations found, Database schema is up to date!"
+
+### Task 2.8 — Add coach proposals schema ✅
+- Added `CoachProposal` model in `prisma/schema.prisma` for AI-generated coach proposals:
+  - `userId` + `user` relation (cascade delete)
+  - `type` (enum: NEXT_SESSION, WEEKLY, PLATEAU, GOALS) — the 4 coach proposal types
+  - `status` (ProposalStatus: PENDING, ACCEPTED, REJECTED) — proposal lifecycle
+  - `inputSummaryHash` (String) — hash of input data for caching/deduplication
+  - `proposalJson` (Json) — AI-generated proposal content, structure varies by type:
+    - NEXT_SESSION: { exercises: [...], notes: string }
+    - WEEKLY: { patches: [...], rationale: string, volumeAnalysis: {...} }
+    - PLATEAU: { diagnosis: string, interventions: [...] }
+    - GOALS: { goals: [...], guardrails: [...] }
+  - `rationale` (nullable String) — optional AI explanation for display
+  - `changeLogs` relation to `RoutineChangeLog` — changes triggered by accepting this proposal
+- Created `ProposalType` enum: NEXT_SESSION, WEEKLY, PLATEAU, GOALS
+- Updated `RoutineChangeLog.proposalId` with proper foreign key relation to `CoachProposal` (onDelete: SetNull)
+- Added `coachProposals` relation on User model
+- Added indexes: `[userId]`, `[userId, type]`, `[userId, status]`, `[inputSummaryHash]` on coach_proposals
+- Migration file: `prisma/migrations/20260218002738_add_coach_proposals_schema/migration.sql`
+- Ran `prisma migrate dev --name add_coach_proposals_schema` → migration applied successfully
+- Verified: `prisma validate` shows "The schema at prisma/schema.prisma is valid 🚀"
+- Verified: `prisma generate` successfully generated Prisma Client
