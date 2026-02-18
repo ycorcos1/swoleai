@@ -610,3 +610,32 @@
   - 404 Not Found if session doesn't exist or doesn't belong to user
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route file (`npx eslint src/app/api/workouts/[id]/end/route.ts`)
+
+### Task 3.10 — History API: list sessions ✅
+- Created `src/app/api/history/route.ts` with list sessions endpoint:
+  - `GET /api/history` — lists workout sessions for the authenticated user with date range filtering
+- Endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for query parameters:
+    - `startDate` (optional ISO 8601 datetime) — filter sessions starting from this date
+    - `endDate` (optional ISO 8601 datetime) — filter sessions ending before this date
+    - `limit` (optional Int, 1-100, default 50) — pagination limit
+    - `offset` (optional Int, min 0, default 0) — pagination offset
+    - `status` (optional enum: 'ACTIVE', 'COMPLETED', 'ABANDONED') — filter by session status
+  - Always scoped to `userId` in where clause
+  - Sessions sorted by `startedAt` descending (most recent first)
+- Response structure:
+  - `sessions` — array of workout sessions including:
+    - id, startedAt, endedAt, status, title, notes, constraintFlags, createdAt, updatedAt
+    - `split` relation (id, name) if session had a splitId
+    - `template` relation (id, name, mode) if session had a templateId
+    - `exercises` array with exercise details and set counts
+    - `durationMinutes` — calculated session duration (null if not ended)
+    - `summary` — { totalExercises, totalSets } for quick stats
+  - `pagination` — { total, limit, offset, hasMore } for pagination info
+- Error responses:
+  - 401 Unauthorized if not authenticated
+  - 400 Bad Request if query param validation fails
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route file
+- Verified: `npm run build` succeeds with `/api/history` registered as dynamic route
