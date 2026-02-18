@@ -19,34 +19,43 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // Validate credentials
-        const result = credentialsSchema.safeParse(credentials);
-        if (!result.success) {
+        try {
+          // Validate credentials
+          const result = credentialsSchema.safeParse(credentials);
+          if (!result.success) {
+            console.log('[Auth] Credentials validation failed');
+            return null;
+          }
+
+          const { email, password } = result.data;
+          const normalizedEmail = email.toLowerCase().trim();
+
+          // Check if user exists in database
+          const user = await prisma.user.findUnique({
+            where: { email: normalizedEmail },
+          });
+          
+          if (!user || !user.password) {
+            console.log('[Auth] User not found or no password:', normalizedEmail);
+            return null;
+          }
+
+          // Verify password
+          const isValid = await bcrypt.compare(password, user.password);
+          if (!isValid) {
+            console.log('[Auth] Invalid password for user:', normalizedEmail);
+            return null;
+          }
+
+          console.log('[Auth] Login successful for:', normalizedEmail);
+          return {
+            id: user.id,
+            email: user.email,
+          };
+        } catch (error) {
+          console.error('[Auth] Error in authorize:', error);
           return null;
         }
-
-        const { email, password } = result.data;
-        const normalizedEmail = email.toLowerCase().trim();
-
-        // Check if user exists in database
-        const user = await prisma.user.findUnique({
-          where: { email: normalizedEmail },
-        });
-        
-        if (!user || !user.password) {
-          return null;
-        }
-
-        // Verify password
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-        };
       },
     }),
   ],
@@ -79,6 +88,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
 };
 
 // Helper function to create a new user (signup)

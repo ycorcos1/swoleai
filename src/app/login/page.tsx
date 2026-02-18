@@ -69,16 +69,28 @@ export default function LoginPage() {
         redirect: false,
       });
 
-      if (result?.error) {
+      if (!result) {
+        setErrors((prev) => ({ ...prev, general: 'Login request failed. Please try again.' }));
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (result.error) {
         setErrors((prev) => ({ ...prev, general: 'Invalid email or password' }));
         setIsSubmitting(false);
         return;
       }
 
-      // Successful login - redirect to dashboard
-      router.push('/app/dashboard');
-      router.refresh();
-    } catch {
+      if (result.ok) {
+        // Successful login - redirect to dashboard
+        router.push('/app/dashboard');
+        router.refresh();
+      } else {
+        setErrors((prev) => ({ ...prev, general: 'Login failed. Please try again.' }));
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       setErrors((prev) => ({ ...prev, general: 'Something went wrong. Please try again.' }));
       setIsSubmitting(false);
     }
