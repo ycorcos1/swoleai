@@ -511,3 +511,35 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route files
 - Verified: `npm run build` succeeds with `/api/templates` and `/api/templates/[id]` registered as dynamic routes
+
+### Task 3.7 — Workouts API: start session ✅
+- Created `src/app/api/workouts/start/route.ts` with start session endpoint:
+  - `POST /api/workouts/start` — starts a new workout session for the authenticated user
+- Endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body with all optional fields:
+    - `splitId` (optional String) — links session to a workout split
+    - `templateId` (optional String) — links session to a workout day template
+    - `title` (optional String, max 200 chars) — auto-generated or user-set session title
+    - `notes` (optional String) — initial session notes
+    - `constraintFlags` (optional object: {pain?: string[], equipmentCrowded?: boolean, lowEnergy?: boolean})
+  - Allows empty request body for completely freestyle workouts
+  - Validates that `splitId` belongs to authenticated user if provided (404 if not found)
+  - Validates that `templateId` belongs to authenticated user if provided (404 if not found)
+  - Creates `WorkoutSession` with:
+    - `status: 'ACTIVE'`
+    - `startedAt: new Date()` (current timestamp)
+    - User-provided or null values for title, notes, splitId, templateId, constraintFlags
+- Response structure:
+  - `sessionId` — the ID of the created session (top-level for easy access)
+  - `session` — full session object including:
+    - id, startedAt, status, title, notes, constraintFlags, splitId, templateId, createdAt
+    - `split` relation (id, name) if splitId was provided
+    - `template` relation (id, name, mode) if templateId was provided
+  - HTTP 201 Created status
+- Error responses:
+  - 401 Unauthorized if not authenticated
+  - 400 Bad Request if validation fails
+  - 404 Not Found if splitId or templateId doesn't exist or doesn't belong to user
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route file (`npx eslint src/app/api/workouts/start/route.ts`)
