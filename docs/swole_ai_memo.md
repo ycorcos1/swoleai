@@ -453,3 +453,21 @@
 - CRUD scoped to user: All operations filter by `userId`, template ID validation checks ownership
 - Verified: `tsc --noEmit` passes, `eslint` clean
 - Verified: `npm run build` succeeds with `/api/splits` and `/api/splits/[id]` registered as dynamic routes
+
+### Task 3.5 — Splits API: activate split ✅
+- Created `src/app/api/splits/[id]/activate/route.ts` with activation endpoint:
+  - `POST /api/splits/:id/activate` — activates the specified split for the authenticated user
+- Activation behavior:
+  - Uses Prisma `$transaction` to atomically deactivate any currently active splits and activate the target split
+  - Deactivates all other splits where `userId` matches and `isActive=true` and `id ≠ target`
+  - Then sets `isActive=true` on the target split
+  - Ensures only one active split per user (app-level enforcement)
+- Idempotency:
+  - If the split is already active, returns success without modifications (`message: 'Split is already active'`)
+  - No side effects when called multiple times on an already-active split
+- Uses `requireAuth()` to get authenticated userId
+- Validates split ID exists and belongs to authenticated user (404 if not found)
+- Returns split object with nested `scheduleDays` including linked `workoutDayTemplate` details
+- Zod schema validation for split ID param
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route file
