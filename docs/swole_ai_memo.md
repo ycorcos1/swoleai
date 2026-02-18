@@ -471,3 +471,43 @@
 - Zod schema validation for split ID param
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route file
+
+### Task 3.6 — Templates API: create/list/update ✅
+- Created `src/app/api/templates/route.ts` with two endpoints:
+  - `GET /api/templates` — lists all workout day templates owned by the authenticated user
+  - `POST /api/templates` — creates a new template with support for FIXED or SLOT mode
+- Created `src/app/api/templates/[id]/route.ts` with update endpoint:
+  - `PUT /api/templates/:id` — updates an existing template (name, progressionEngine, notes, estimatedMinutes, blocks/slots)
+- GET endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Always scoped to `userId` in where clause
+  - Supports query filters: `mode` (TemplateMode enum), `search` (partial name match, case-insensitive)
+  - Returns templates with nested `blocks` (for FIXED) and `slots` (for SLOT) including exercise details
+  - Orders by updatedAt descending
+- POST endpoint features (supports fixed + slot mode payloads):
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body with mode-aware refinement
+  - FIXED mode: accepts `blocks` array with exerciseId, orderIndex, setsPlanned, repMin, repMax, restSeconds, progressionEngine, intensityTarget, notes
+  - SLOT mode: accepts `slots` array with muscleGroup, exerciseCount, orderIndex, patternConstraints, equipmentConstraints, defaultSets, defaultRepMin, defaultRepMax, notes
+  - Validates mode-appropriate data (FIXED templates cannot have slots, SLOT templates cannot have blocks)
+  - Validates that all exercise IDs in blocks belong to user or are system exercises
+  - Uses `exercise: { connect: { id } }` pattern and `Prisma.JsonNull` for null JSON fields
+  - Returns 201 with created template including blocks/slots
+- PUT endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Validates template exists and belongs to authenticated user (404 if not found)
+  - Zod schema validation for request body (all fields optional)
+  - Enforces mode-appropriate updates (cannot add slots to FIXED template, cannot add blocks to SLOT template)
+  - Mode cannot be changed after creation
+  - If `blocks`/`slots` provided, replaces all existing ones (delete + create in transaction)
+  - Simple updates (name/notes/etc only) don't require transaction
+  - Validates that all exercise IDs in blocks belong to user or are system exercises
+- Validation schemas:
+  - `listTemplatesQuerySchema` — validates GET query params
+  - `workoutDayBlockSchema` — validates FIXED template blocks with ProgressionEngine enum
+  - `workoutDaySlotSchema` — validates SLOT template slots with MovementPattern and ExerciseType enums
+  - `createTemplateSchema` — validates POST body with mode-aware refinement
+  - `updateTemplateSchema` — validates PUT body (all fields optional)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route files
+- Verified: `npm run build` succeeds with `/api/templates` and `/api/templates/[id]` registered as dynamic routes
