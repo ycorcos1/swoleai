@@ -1086,3 +1086,53 @@
   - Stack cleared on session end ✓
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `eslint` passes with no errors (1 pre-existing warning)
+
+### Task 5.6 — Set flags ✅
+- Updated `src/components/workout/SetLoggerSheet.tsx` — added flag toggle UI:
+  - **New Types**:
+    - `SetFlagKey` — exported union type: `'warmup' | 'backoff' | 'dropset' | 'failure'`
+    - `SetFlags` — interface with optional boolean for each flag key
+    - `FlagToggleConfig` — config object for each flag (key, label, shortLabel, icon, activeColor, activeBg)
+  - **FLAG_CONFIGS constant** — array of 4 flag configurations:
+    - **Warmup** — `Flame` icon, info/cyan color, "W" short label
+    - **Backoff** — `TrendingDown` icon, accent-blue color, "B" short label
+    - **Drop** — `Zap` icon, warning/amber color, "D" short label
+    - **Failure** — `AlertTriangle` icon, error/red color, "F" short label
+  - **`FlagToggles` component** (Task 5.6):
+    - Row of 4 toggle buttons below the steppers
+    - Each button is 64px min-width × 56px height (44px+ touch targets per design spec)
+    - Active state: colored background + border matching flag color, colored icon/text
+    - Inactive state: neutral gray background, muted text
+    - `aria-pressed` attribute for accessibility
+    - `aria-label` indicates current state ("Add/Remove X flag")
+    - `active:scale-95` press feedback
+  - **State Management**:
+    - Added `flags` state (`SetFlags`) initialized to `{}`
+    - `handleToggleFlag(key)` — toggles individual flag on/off
+    - `cleanFlags(f)` — strips false values, returns `undefined` if no flags set (clean storage)
+  - **Pre-fill Behavior**:
+    - Edit mode: pre-fills `flags` from `editingSet.flags ?? {}`
+    - New set mode: flags always reset to `{}` (flags are per-set intent, not carried forward)
+  - **Data Flow**:
+    - `handleLogSet()` passes `flags: cleanFlags(flags)` in the set payload
+    - `handleUpdateSet()` passes `flags: cleanFlags(flags)` in the update payload
+    - Flags flow through `onLogSet` → `addSetToExercise()` (IndexedDB) → `enqueueMutation('LOG_SET')` (sync)
+    - Flags flow through `onUpdateSet` → `updateSetInExercise()` (IndexedDB) → `enqueueMutation('UPDATE_SET')` (sync)
+- Updated `src/app/app/workout/session/[id]/page.tsx` — added backoff flag display:
+  - **ExerciseCard set pills** now show all 4 flag badges:
+    - **W** (warmup) — info/cyan color (already existed)
+    - **B** (backoff) — accent-blue color (new)
+    - **D** (dropset) — warning/amber color (already existed)
+    - **F** (failure) — error/red color (moved to last position for consistent ordering)
+  - Badge ordering: W → B → D → F (warm → cool → hot → critical)
+- Updated `src/components/workout/index.ts` — exported `SetFlagKey` type
+- **Data Model** (already existed — no schema changes needed):
+  - `ActiveSessionSet.flags` in `db.ts`: `{ warmup?, backoff?, dropset?, failure? }` — IndexedDB
+  - `SetEvent.payload.flags` in `db.ts`: same structure — event log
+  - `WorkoutSet.flags` in `schema.prisma`: `Json @default("{}")` — Postgres
+  - `UndoUpdateSetPayload.previousValues.flags` in `db.ts`: preserves flags for undo
+- **Acceptance criteria verified**:
+  - Flags are saved ✓ (IndexedDB via `addSetToExercise()` / `updateSetInExercise()`, sync queue via `enqueueMutation()`)
+  - Flags are displayed ✓ (set pills show W/B/D/F badges, edit mode pre-fills flags)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors on changed files

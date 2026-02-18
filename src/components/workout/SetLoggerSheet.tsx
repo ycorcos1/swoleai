@@ -1,13 +1,14 @@
 'use client';
 
 /**
- * SetLoggerSheet — Task 5.3 + Task 5.4
+ * SetLoggerSheet — Task 5.3 + Task 5.4 + Task 5.6
  *
  * A modal/sheet component for logging and editing sets during a workout.
  *
  * Features (per Design Spec 5.3.2):
  * - Big steppers for weight/reps (gym-first UX)
  * - Optional RPE selector
+ * - Flag toggles: warmup / backoff / drop / failure (Task 5.6)
  * - Writes to IndexedDB immediately for instant UI updates
  * - Queues sync mutation for background server sync
  * - Edit mode: update previously logged sets (Task 5.4)
@@ -17,6 +18,7 @@
  * - Previous sets summary (if any)
  * - Weight stepper (large touch targets)
  * - Reps stepper (large touch targets)
+ * - Flag toggles (large touch targets)
  * - Log Set / Update Set button (primary CTA)
  */
 
@@ -30,6 +32,10 @@ import {
   Check,
   Loader2,
   Edit3,
+  Flame,
+  TrendingDown,
+  Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
 
@@ -76,6 +82,114 @@ interface StepperProps {
   max?: number;
   /** Unit suffix (e.g., "lbs", "reps") */
   unit?: string;
+}
+
+// =============================================================================
+// SET FLAG TYPES (Task 5.6)
+// =============================================================================
+
+export type SetFlagKey = 'warmup' | 'backoff' | 'dropset' | 'failure';
+
+interface SetFlags {
+  warmup?: boolean;
+  backoff?: boolean;
+  dropset?: boolean;
+  failure?: boolean;
+}
+
+interface FlagToggleConfig {
+  key: SetFlagKey;
+  label: string;
+  shortLabel: string;
+  icon: React.ReactNode;
+  activeColor: string;
+  activeBg: string;
+}
+
+const FLAG_CONFIGS: FlagToggleConfig[] = [
+  {
+    key: 'warmup',
+    label: 'Warmup',
+    shortLabel: 'W',
+    icon: <Flame className="h-4 w-4" />,
+    activeColor: 'text-[var(--color-info)]',
+    activeBg: 'bg-[var(--color-info)]/20 border-[var(--color-info)]/50',
+  },
+  {
+    key: 'backoff',
+    label: 'Backoff',
+    shortLabel: 'B',
+    icon: <TrendingDown className="h-4 w-4" />,
+    activeColor: 'text-[var(--color-accent-blue)]',
+    activeBg: 'bg-[var(--color-accent-blue)]/20 border-[var(--color-accent-blue)]/50',
+  },
+  {
+    key: 'dropset',
+    label: 'Drop',
+    shortLabel: 'D',
+    icon: <Zap className="h-4 w-4" />,
+    activeColor: 'text-[var(--color-warning)]',
+    activeBg: 'bg-[var(--color-warning)]/20 border-[var(--color-warning)]/50',
+  },
+  {
+    key: 'failure',
+    label: 'Failure',
+    shortLabel: 'F',
+    icon: <AlertTriangle className="h-4 w-4" />,
+    activeColor: 'text-[var(--color-error)]',
+    activeBg: 'bg-[var(--color-error)]/20 border-[var(--color-error)]/50',
+  },
+];
+
+// =============================================================================
+// FLAG TOGGLES COMPONENT (Task 5.6)
+// =============================================================================
+
+/**
+ * Flag toggle buttons for set types: warmup, backoff, drop set, failure
+ * Designed with large touch targets for gym use
+ */
+function FlagToggles({
+  flags,
+  onToggle,
+}: {
+  flags: SetFlags;
+  onToggle: (key: SetFlagKey) => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <span className="text-sm font-medium text-[var(--color-text-secondary)] uppercase tracking-wider">
+        Flags
+      </span>
+      <div className="flex items-center gap-2">
+        {FLAG_CONFIGS.map((config) => {
+          const isActive = !!flags[config.key];
+          return (
+            <button
+              key={config.key}
+              type="button"
+              onClick={() => onToggle(config.key)}
+              className={`
+                flex flex-col items-center justify-center gap-1 h-14 min-w-[64px] px-3 rounded-xl border transition-all active:scale-95
+                ${
+                  isActive
+                    ? `${config.activeBg} ${config.activeColor}`
+                    : 'bg-[var(--color-base-600)] border-transparent text-[var(--color-text-muted)]'
+                }
+              `}
+              aria-label={`${isActive ? 'Remove' : 'Add'} ${config.label} flag`}
+              aria-pressed={isActive}
+            >
+              {config.icon}
+              <span className="text-[10px] font-semibold uppercase">
+                {config.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // =============================================================================
@@ -199,6 +313,7 @@ export function SetLoggerSheet({
 }: SetLoggerSheetProps) {
   const [weight, setWeight] = useState(0);
   const [reps, setReps] = useState(0);
+  const [flags, setFlags] = useState<SetFlags>({});
   const [isLogging, setIsLogging] = useState(false);
 
   // Determine if we're in edit mode (Task 5.4)
@@ -219,21 +334,44 @@ export function SetLoggerSheet({
         // Edit mode: pre-fill with the set being edited
         setWeight(editingSet.weight);
         setReps(editingSet.reps);
+        setFlags(editingSet.flags ?? {});
       } else if (lastSet) {
         // New set mode: pre-fill from last set
         setWeight(lastSet.weight);
         setReps(lastSet.reps);
+        // Don't carry flags from last set — flags are per-set intent
+        setFlags({});
       } else {
         // No previous set - reset to defaults
         setWeight(0);
         setReps(0);
+        setFlags({});
       }
     }
   }, [isOpen, lastSet, editingSet]);
 
+  // Toggle a flag on or off (Task 5.6)
+  const handleToggleFlag = useCallback((key: SetFlagKey) => {
+    setFlags((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }, []);
+
   // Generate unique local ID for the set
   const generateLocalId = useCallback(() => {
     return `set_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }, []);
+
+  // Clean flags object: remove false values so we only store true flags
+  const cleanFlags = useCallback((f: SetFlags): SetFlags | undefined => {
+    const cleaned: SetFlags = {};
+    let hasAny = false;
+    if (f.warmup) { cleaned.warmup = true; hasAny = true; }
+    if (f.backoff) { cleaned.backoff = true; hasAny = true; }
+    if (f.dropset) { cleaned.dropset = true; hasAny = true; }
+    if (f.failure) { cleaned.failure = true; hasAny = true; }
+    return hasAny ? cleaned : undefined;
   }, []);
 
   // Handle logging a new set
@@ -246,6 +384,7 @@ export function SetLoggerSheet({
         localId: generateLocalId(),
         weight,
         reps,
+        flags: cleanFlags(flags),
       });
 
       // Success - close the sheet
@@ -256,7 +395,7 @@ export function SetLoggerSheet({
     } finally {
       setIsLogging(false);
     }
-  }, [exercise.localId, weight, reps, onLogSet, onClose, generateLocalId, isLogging]);
+  }, [exercise.localId, weight, reps, flags, onLogSet, onClose, generateLocalId, isLogging, cleanFlags]);
 
   // Handle updating an existing set (Task 5.4)
   const handleUpdateSet = useCallback(async () => {
@@ -267,6 +406,7 @@ export function SetLoggerSheet({
       await onUpdateSet(exercise.localId, editingSet.localId, {
         weight,
         reps,
+        flags: cleanFlags(flags),
       });
 
       // Success - close the sheet
@@ -277,7 +417,7 @@ export function SetLoggerSheet({
     } finally {
       setIsLogging(false);
     }
-  }, [exercise.localId, editingSet, weight, reps, onUpdateSet, onClose, isLogging]);
+  }, [exercise.localId, editingSet, weight, reps, flags, onUpdateSet, onClose, isLogging, cleanFlags]);
 
   // Combined submit handler
   const handleSubmit = useCallback(() => {
@@ -375,6 +515,9 @@ export function SetLoggerSheet({
               min={0}
               max={999}
             />
+
+            {/* Flag Toggles (Task 5.6) */}
+            <FlagToggles flags={flags} onToggle={handleToggleFlag} />
           </div>
 
           {/* Log/Update Set Button */}

@@ -5,4 +5,4 @@
  */
 
 export { SetLoggerSheet } from './SetLoggerSheet';
-export type { SetLoggerSheetProps } from './SetLoggerSheet';
+export type { SetLoggerSheetProps, SetFlagKey } from './SetLoggerSheet';

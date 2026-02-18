@@ -183,20 +183,25 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet }: ExerciseCardProps
               <span className="text-sm font-medium tabular-nums text-[var(--color-text-primary)]">
                 {set.weight}×{set.reps}
               </span>
-              {/* Flags */}
+              {/* Flags (Task 5.6) */}
               {set.flags?.warmup && (
                 <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-info)]/20 text-[var(--color-info)]">
                   W
                 </span>
               )}
-              {set.flags?.failure && (
-                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)]">
-                  F
+              {set.flags?.backoff && (
+                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-accent-blue)]/20 text-[var(--color-accent-blue)]">
+                  B
                 </span>
               )}
               {set.flags?.dropset && (
                 <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
                   D
+                </span>
+              )}
+              {set.flags?.failure && (
+                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)]">
+                  F
                 </span>
               )}
             </button>
