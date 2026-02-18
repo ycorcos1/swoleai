@@ -543,3 +543,39 @@
   - 404 Not Found if splitId or templateId doesn't exist or doesn't belong to user
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: No linter errors in new route file (`npx eslint src/app/api/workouts/start/route.ts`)
+
+### Task 3.8 — Workouts API: log set ✅
+- Created `src/app/api/workouts/[id]/log-set/route.ts` with log set endpoint:
+  - `POST /api/workouts/:id/log-set` — logs a single set for an exercise within a workout session
+- Endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body:
+    - `exerciseId` (required String) — exercise to log the set for
+    - `weight` (required Number, non-negative) — weight used
+    - `reps` (required Int, positive) — reps performed
+    - `rpe` (optional Number, 1-10) — Rate of Perceived Exertion
+    - `flags` (optional object: {warmup?, backoff?, dropset?, failure?}) — set type flags
+    - `notes` (optional String) — per-set notes
+  - Validates that session exists and belongs to authenticated user (404 if not found)
+  - Validates that session is ACTIVE (400 if COMPLETED or ABANDONED)
+  - Validates that exercise exists and is accessible (system OR user's custom exercise)
+- Auto-creates WorkoutExercise if missing:
+  - If exercise hasn't been logged in this session yet, creates a new `WorkoutExercise` entry
+  - Automatically assigns next available `orderIndex` within the session
+  - Enables freestyle workouts — users can add any exercise mid-workout
+- Set logging behavior:
+  - Automatically assigns next available `setIndex` within the exercise
+  - Sets append correctly in order — each new set gets `setIndex = max(existing) + 1`
+  - Preserves all flags (warmup, backoff, dropset, failure) in the set's `flags` JSON field
+  - Uses Prisma `$transaction` for atomic find-or-create + append operations
+- Response structure:
+  - `set` — the created WorkoutSet object (id, setIndex, weight, reps, rpe, flags, notes, createdAt)
+  - `exercise` — exercise context (id, name, workoutExerciseId, orderIndex)
+  - `sessionId` — the session ID for reference
+  - HTTP 201 Created status
+- Error responses:
+  - 401 Unauthorized if not authenticated
+  - 400 Bad Request if validation fails or session is not active
+  - 404 Not Found if session or exercise doesn't exist or isn't accessible
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in new route file
