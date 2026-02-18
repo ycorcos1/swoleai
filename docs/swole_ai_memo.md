@@ -767,3 +767,29 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `npm run lint` passes with no errors
 - Verified: `npm run build` succeeds — all sync modules compile correctly
+
+### Task 4.4 — Sync status pill ✅
+- Created `src/components/ui/SyncStatusPill.tsx` — global sync indicator component:
+  - Uses `useSync()` hook from Task 4.3 to read sync status
+  - Displays 5 distinct states with appropriate icons and colors:
+    - **synced** (green checkmark) — all changes synced
+    - **pending** (amber RefreshCw) — changes waiting to sync, shows count (e.g., "3 pending")
+    - **syncing** (amber spinning Loader2) — actively syncing, shows count (e.g., "Syncing 2")
+    - **offline** (gray CloudOff) — device offline
+    - **error** (red AlertCircle) — sync failed, clickable to retry
+  - Status config object maps each status to icon, label, CSS class, and animation flag
+  - Error state is interactive — clicking triggers `triggerSync()` for manual retry
+  - Accessible: includes `aria-label` for screen readers and tooltip on error state
+  - Lucide icons: Check, CloudOff, RefreshCw, AlertCircle, Loader2
+- Updated `src/app/globals.css` — added offline status pill style:
+  - `.status-pill--offline` with gray background (`rgba(113, 113, 122, 0.15)`) and muted text color
+  - Complements existing `.status-pill--success`, `--warning`, `--error`, `--info` variants
+- Updated `src/components/layout/AppShell.tsx` — integrated global sync indicator:
+  - Added sticky header with `SyncStatusPill` component
+  - Header styled with glass effect: `bg-[var(--color-base-800)]/95 backdrop-blur-lg`
+  - Positioned at top-right per design spec section 2.3 ("Global sync pill (top of Dashboard, Settings)")
+  - Safe area padding for PWA notch handling
+- Updated `src/components/ui/index.ts` — exported `SyncStatusPill`
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npm run lint` passes with no errors (CSS warning expected)
+- Verified: `npm run build` succeeds — production build compiles correctly

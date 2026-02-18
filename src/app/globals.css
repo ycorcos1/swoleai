@@ -179,6 +179,11 @@ body {
   color: var(--color-info);
 }
 
+.status-pill--offline {
+  background: rgba(113, 113, 122, 0.15);
+  color: var(--color-text-muted);
+}
+
 /* Gradient text */
 .gradient-text {
   background: var(--color-accent-gradient);
