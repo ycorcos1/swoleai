@@ -364,3 +364,18 @@
 - Ran `prisma migrate dev --name add_coach_proposals_schema` → migration applied successfully
 - Verified: `prisma validate` shows "The schema at prisma/schema.prisma is valid 🚀"
 - Verified: `prisma generate` successfully generated Prisma Client
+
+### Task 3.1 — API auth guard helper ✅
+- Created `src/lib/auth/require-auth.ts` with server-side authentication helpers:
+  - `requireAuth()` — returns discriminated union for route handlers:
+    - Success: `{ success: true, userId: string, email: string }`
+    - Failure: `{ success: false, response: NextResponse }` (401 Unauthorized)
+  - `getAuthUserId()` — returns `userId` or throws Error (for server actions)
+  - `getAuthUser()` — returns `{ userId, email }` or throws Error (for server actions)
+- Created `src/lib/auth/index.ts` barrel export consolidating all auth exports:
+  - Re-exports `authOptions`, `createUser`, `userExists` from auth.config
+  - Re-exports `requireAuth`, `getAuthUserId`, `getAuthUser`, `AuthResult` from require-auth
+- Uses `getServerSession(authOptions)` from next-auth for session retrieval
+- Returns 401 JSON response with `{ error: 'Unauthorized', message: 'Authentication required' }` when unauthenticated
+- Usage pattern documented in JSDoc with code examples
+- Verified: `npm run build` passes, `tsc --noEmit` passes, `npm run lint` clean
