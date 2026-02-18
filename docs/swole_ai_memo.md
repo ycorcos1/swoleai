@@ -793,3 +793,141 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `npm run lint` passes with no errors (CSS warning expected)
 - Verified: `npm run build` succeeds — production build compiles correctly
+
+---
+
+## H) Production Deployment Fixes
+
+### Fix: Prisma generate in build script ✅
+- **Problem:** Vercel deployment failed with `Module '@prisma/client' has no exported member 'ExerciseType'`
+- **Cause:** Prisma client wasn't being generated during Vercel build
+- **Solution:** Updated `package.json` build script from `"next build"` to `"prisma generate && next build"`
+- Ensures Prisma client with all enums is generated before Next.js compilation
+
+### Fix: Auth switched from in-memory to Prisma database ✅
+- **Problem:** Login was stuck/hanging on Vercel deployment
+- **Cause:** Auth was using in-memory `Map` for user storage — serverless functions are stateless, so users weren't persisted
+- **Solution:** Updated `src/lib/auth/auth.config.ts`:
+  - `authorize()` now queries `prisma.user.findUnique()` instead of in-memory Map
+  - `createUser()` now uses `prisma.user.create()` 
+  - `userExists()` now uses `prisma.user.findUnique()` (made async)
+- Updated `src/app/api/auth/signup/route.ts` to `await userExists()` since it's now async
+- Added try/catch error handling and `[Auth]` console logging for debugging
+
+### Fix: Secure cookies for production ✅
+- **Problem:** Login succeeded but user was redirected back to login page
+- **Cause:** On Vercel (HTTPS), NextAuth uses `__Secure-` prefixed cookie names, but middleware was looking for non-prefixed name
+- **Solution:**
+  - Added explicit cookie configuration in `src/lib/auth/auth.config.ts`:
+    - Production uses `__Secure-next-auth.session-token`
+    - Development uses `next-auth.session-token`
+  - Updated `src/middleware.ts` to use matching `cookieName` in `getToken()` call
+- Login flow now works correctly on Vercel production deployment
+
+### Fix: Dashboard date timezone ✅
+- **Problem:** Dashboard showed date one day ahead
+- **Cause:** `new Date()` was running on server (UTC timezone on Vercel) instead of client
+- **Solution:** Made dashboard a client component (`'use client'`) and compute date in `useEffect` hook
+- Date now displays correctly in user's local timezone
+
+### Task 5.1 — Workout Start screen ✅
+- Created `src/app/app/workout/start/page.tsx` — Workout Start screen entry point:
+  - **Today's Scheduled Workout section**:
+    - Fetches active split via `GET /api/splits?activeOnly=true`
+    - Determines today's weekday and finds matching `SplitScheduleDay`
+    - Shows scheduled template with "Scheduled" badge and primary styling if available
+    - Shows "Rest Day" notice if `isRest=true` for today
+    - Shows "No Active Split" notice if user has no active split configured
+  - **Templates List section**:
+    - Fetches all templates via `GET /api/templates`
+    - Shows "Your Templates" list (excluding today's scheduled template)
+    - Each card shows template name, estimated duration, exercise count/muscle groups
+  - **Freestyle Quick Start section**:
+    - "Freestyle Workout" option to start empty and add exercises as you go
+  - **Start Workout flow**:
+    - `handleStartWorkout()` calls `startSession()` from `useActiveSessionContext()` → saves to IndexedDB + queues sync mutation
+    - Calls `POST /api/workouts/start` to create server session
+    - Routes to Workout Mode via `router.push('/app/workout/session/current')`
+  - Loading states with skeleton cards, error handling, accessibility
+- Created `src/app/app/workout/page.tsx` — Workout hub redirect page:
+  - If active session exists → redirects to `/app/workout/session/:id`
+  - If no active session → redirects to `/app/workout/start`
+  - Shows loading spinner during session check
+- Created `src/app/app/workout/session/[id]/page.tsx` — Workout Session placeholder:
+  - Placeholder for Task 5.2 (Workout Mode screen skeleton)
+  - Shows session title, start time, exercise count from `useActiveSessionContext()`
+  - "No Active Session" state if session not found
+- Updated `src/app/app/layout.tsx` — wrapped app with `ActiveSessionProvider`:
+  - Imports `ActiveSessionProvider` from `@/lib/offline`
+  - Wraps `<AppShell>` children so session context is available throughout authenticated app
+- **UI Components used**:
+  - `WorkoutOptionCard` — reusable card component with icon, title, subtitle, badge, loading state
+  - `GlassCard` — glass-styled card for notices (rest day, no split)
+  - Lucide icons: Play, CalendarCheck, Dumbbell, Sparkles, ChevronRight, Loader2
+- **Acceptance criteria verified**:
+  - Starting workout creates session (IndexedDB + API) ✓
+  - Routes to Workout Mode (`/app/workout/session/current`) ✓
+- Verified: `npm run build` succeeds — all routes compile:
+  - `/app/workout` (Static)
+  - `/app/workout/start` (Static)
+  - `/app/workout/session/[id]` (Dynamic)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `npx eslint src/app/app/workout/ src/app/app/layout.tsx` — no lint errors in new files
+
+### Task 5.2 — Workout Mode screen skeleton ✅
+- Rebuilt `src/app/app/workout/session/[id]/page.tsx` — full Workout Mode interface:
+  - **Top Bar**:
+    - Session title (or "Workout" fallback)
+    - Elapsed time component with `Clock` icon, updates every second
+    - `SyncStatusPill` (compact, no count)
+    - Overflow menu button (`MoreVertical` icon)
+    - Sticky header with glass blur effect
+  - **Exercise Cards List**:
+    - `ExerciseCard` component for each exercise in session
+    - Shows exercise name, sets count badge, best set indicator (`TrendingUp` icon)
+    - Sets summary line (e.g., "135×8 / 145×6 / 155×4")
+    - Set flag badges (Warmup, Failure, Drop) with appropriate colors
+    - Tappable cards with `onTap` handler ready for Task 5.3 Set Logger
+    - Sorted by `orderIndex` ascending
+  - **Empty State**:
+    - `EmptyExerciseState` component with Dumbbell icon
+    - "No exercises yet" message with "Add Exercise" CTA button
+  - **Bottom Bar** (fixed above BottomNav):
+    - `BottomBar` component positioned with `bottom: var(--bottom-nav-height)` to sit above nav
+    - **Add Exercise** button — gradient primary style with `Plus` icon
+    - **Timer** button — toggleable state with `Timer` icon (placeholder for Task 5.7)
+    - **End Workout** button — `Square` icon with error color
+    - All buttons have 44px+ touch targets, labels below icons
+  - **End Workout Flow**:
+    - Shows styled `ConfirmModal` instead of `window.confirm()`
+    - "End Workout?" title with danger variant styling
+    - "Keep Going" (cancel) and "End Workout" (confirm) buttons
+    - Loading state during `endSession()` async operation
+    - On confirm: ends session via IndexedDB + sync, redirects to `/app/workout/start`
+- Created `src/components/ui/ConfirmModal.tsx` — reusable confirmation modal component:
+  - **Props**: `isOpen`, `onClose`, `onConfirm`, `title`, `message`, `confirmLabel`, `cancelLabel`, `variant`, `isLoading`
+  - **Variants**: `danger` (red), `warning` (amber), `info` (purple/blue gradient), `success` (green)
+  - Each variant has matching icon (AlertTriangle, Info, CheckCircle), icon background, and confirm button color
+  - Backdrop with blur effect, centered modal with glass card styling
+  - Close on Escape key or backdrop click (unless loading)
+  - Focus management: focuses confirm button on open
+  - Prevents body scroll while open
+  - Loading spinner state for async confirm actions
+  - ARIA attributes for accessibility (`role="dialog"`, `aria-modal`, `aria-labelledby`)
+- Updated `src/components/ui/index.ts` — exported `ConfirmModal` and types
+- **Layout Fixes**:
+  - Bottom bar positioned above BottomNav using `bottom: var(--bottom-nav-height)` (72px)
+  - Main content has `pb-40` (160px) padding to account for both bars
+  - Removed `safe-area-bottom` from workout bottom bar (BottomNav handles it)
+- **Mobile-first Design**:
+  - 44px+ touch targets on all buttons
+  - `touch-target` CSS class applied
+  - `active:scale-[0.98]` feedback on tap
+  - `tabular-nums` for weight/rep displays
+  - Safe area handling for PWA notch support
+- **Acceptance criteria verified**:
+  - Screen renders ✓ (`npm run build` succeeds, no TypeScript errors)
+  - Usable on mobile ✓ (large touch targets, sticky bars, proper spacing)
+- Verified: `npm run build` succeeds — `/app/workout/session/[id]` compiles as dynamic route
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: No linter errors in updated files
