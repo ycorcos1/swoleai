@@ -417,3 +417,39 @@
 - Returns 401 if unauthenticated
 - Verified: `tsc --noEmit` passes, `eslint` clean
 - Verified: `next build` succeeds with `/api/favorites/[exerciseId]` registered as dynamic route
+
+### Task 3.4 — Splits API: create/list/update ✅
+- Created `src/app/api/splits/route.ts` with two endpoints:
+  - `GET /api/splits` — lists all splits owned by the authenticated user
+  - `POST /api/splits` — creates a new split with optional schedule days
+- Created `src/app/api/splits/[id]/route.ts` with update endpoint:
+  - `PUT /api/splits/:id` — updates an existing split (name, isActive, scheduleDays)
+- GET endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Always scoped to `userId` in where clause
+  - Supports `activeOnly=true` query filter to return only active split
+  - Returns splits with nested `scheduleDays` including linked `workoutDayTemplate` details
+  - Orders by isActive (active first), then updatedAt descending
+- POST endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body (name required, isActive optional, scheduleDays optional)
+  - If `isActive=true`, deactivates all other user splits before creating
+  - Validates that all `workoutDayTemplateId` references belong to the authenticated user
+  - Creates split with nested `scheduleDays` in single Prisma create
+  - Returns 201 with created split including schedule days
+- PUT endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Validates split exists and belongs to authenticated user (404 if not found)
+  - Zod schema validation for request body (all fields optional)
+  - If `isActive=true` and split wasn't active, deactivates all other user splits
+  - Validates that all `workoutDayTemplateId` references belong to the authenticated user
+  - If `scheduleDays` provided, replaces all existing days (delete + create in transaction)
+  - Simple updates (name/isActive only) don't require transaction
+- Validation schemas:
+  - `listSplitsQuerySchema` — validates GET query params
+  - `scheduleDaySchema` — validates weekday (Weekday enum), workoutDayTemplateId, isRest, label
+  - `createSplitSchema` — validates POST body
+  - `updateSplitSchema` — validates PUT body (all fields optional)
+- CRUD scoped to user: All operations filter by `userId`, template ID validation checks ownership
+- Verified: `tsc --noEmit` passes, `eslint` clean
+- Verified: `npm run build` succeeds with `/api/splits` and `/api/splits/[id]` registered as dynamic routes
