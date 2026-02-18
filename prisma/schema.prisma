@@ -64,6 +64,23 @@ enum FavoritePriority {
   BACKUP
 }
 
+// Template mode enum (Task 2.5)
+// Determines how a workout day template defines its exercises
+enum TemplateMode {
+  FIXED // Explicit exercises with order, sets, reps
+  SLOT  // Muscle group slots filled dynamically from favorites/AI
+}
+
+// Progression engine enum (Task 2.5)
+// Determines how weights/reps progress over time
+enum ProgressionEngine {
+  DOUBLE_PROGRESSION // Hit rep ceiling → increase weight
+  STRAIGHT_SETS      // Fixed sets/reps, increase weight when easy
+  TOP_SET_BACKOFF    // Heavy top set + lighter backoffs
+  RPE_BASED          // Target RPE per set
+  NONE               // No auto-progression (manual)
+}
+
 // Weekday enum (Task 2.4)
 // Maps to split schedule days for weekly programming
 enum Weekday {
@@ -110,6 +127,9 @@ model User {
   // Relations (Task 2.4)
   splits Split[] // User's workout splits (program schedules)
 
+  // Relations (Task 2.5)
+  workoutDayTemplates WorkoutDayTemplate[] // User's saved workout day templates
+
   @@map("users")
 }
 
@@ -151,6 +171,9 @@ model Exercise {
 
   // Relations
   favorites Favorite[]
+
+  // Relations (Task 2.5)
+  workoutDayBlocks WorkoutDayBlock[] // Blocks that use this exercise
 
   // Index for efficient lookups of user's custom exercises
   @@index([ownerUserId, isCustom])
@@ -234,8 +257,6 @@ model SplitScheduleDay {
   weekday Weekday
 
   // Reference to workout day template (nullable if rest day)
-  // Note: WorkoutDayTemplate model will be added in Task 2.5
-  // For now, storing as nullable String ID for forward compatibility
   workoutDayTemplateId String? @map("workout_day_template_id")
 
   // Whether this is a rest day
@@ -246,9 +267,148 @@ model SplitScheduleDay {
   // Useful for display when template might not be assigned yet
   label String?
 
+  // Relation to WorkoutDayTemplate (Task 2.5)
+  // Now a proper foreign key instead of String ID
+  workoutDayTemplate WorkoutDayTemplate? @relation(fields: [workoutDayTemplateId], references: [id], onDelete: SetNull)
+
   // Unique constraint: each split can only have one entry per weekday
   @@unique([splitId, weekday])
   // Index for efficient lookup of split's schedule
   @@index([splitId])
   @@map("split_schedule_days")
+}
+
+// =============================================================================
+// WORKOUT DAY TEMPLATES (Task 2.5)
+// =============================================================================
+
+// WorkoutDayTemplate model (Task 2.5)
+// Represents a saved workout day configuration (e.g., "Push A", "Upper Body")
+// Can be either FIXED (explicit exercises) or SLOT (muscle group placeholders)
+model WorkoutDayTemplate {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Template name (e.g., "Push A", "Pull B", "Full Body")
+  name String
+
+  // Mode determines how exercises are defined
+  // FIXED: Uses WorkoutDayBlock with specific exercises
+  // SLOT: Uses WorkoutDaySlot with muscle group placeholders
+  mode TemplateMode @default(FIXED)
+
+  // Default progression engine for blocks in this template
+  // Can be overridden per block
+  defaultProgressionEngine ProgressionEngine @default(DOUBLE_PROGRESSION) @map("default_progression_engine")
+
+  // Optional notes/description for this template
+  notes String?
+
+  // Estimated duration in minutes (calculated or user-set)
+  estimatedMinutes Int? @map("estimated_minutes")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations
+  blocks       WorkoutDayBlock[] // For FIXED mode: ordered exercise blocks
+  slots        WorkoutDaySlot[]  // For SLOT mode: muscle group slots
+  scheduleDays SplitScheduleDay[] // Days that reference this template
+
+  // Index for efficient lookup of user's templates
+  @@index([userId])
+  @@map("workout_day_templates")
+}
+
+// WorkoutDayBlock model (Task 2.5)
+// Represents a specific exercise slot in a FIXED template
+// Defines the exercise, sets, rep range, rest, and progression
+model WorkoutDayBlock {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Parent template
+  templateId String              @map("template_id")
+  template   WorkoutDayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Order within the template (0-indexed)
+  orderIndex Int @map("order_index")
+
+  // Exercise assigned to this block
+  exerciseId String   @map("exercise_id")
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  // Set configuration
+  setsPlanned Int @default(3) @map("sets_planned")
+  repMin      Int @default(8) @map("rep_min")
+  repMax      Int @default(12) @map("rep_max")
+
+  // Rest between sets in seconds
+  restSeconds Int @default(120) @map("rest_seconds")
+
+  // Override progression engine for this block (optional)
+  // If null, uses template's defaultProgressionEngine
+  progressionEngine ProgressionEngine? @map("progression_engine")
+
+  // Intensity target (optional)
+  // Structure: { rpe?: number, rir?: number, percentOf1RM?: number }
+  intensityTarget Json? @map("intensity_target")
+
+  // Notes for this block (e.g., "Focus on slow eccentric")
+  notes String?
+
+  // Unique constraint: each template can only have one block per order index
+  @@unique([templateId, orderIndex])
+  // Index for efficient lookup
+  @@index([templateId])
+  @@map("workout_day_blocks")
+}
+
+// WorkoutDaySlot model (Task 2.5)
+// Represents a muscle group placeholder in a SLOT template
+// Used for dynamic exercise selection from favorites or AI
+model WorkoutDaySlot {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Parent template
+  templateId String              @map("template_id")
+  template   WorkoutDayTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Order within the template (0-indexed)
+  orderIndex Int @map("order_index")
+
+  // Target muscle group for this slot (e.g., "chest", "back", "quads")
+  muscleGroup String @map("muscle_group")
+
+  // Number of exercises to fill for this muscle group
+  exerciseCount Int @default(1) @map("exercise_count")
+
+  // Optional movement pattern constraints
+  // Structure: { allowedPatterns?: MovementPattern[], excludedPatterns?: MovementPattern[] }
+  patternConstraints Json? @map("pattern_constraints")
+
+  // Optional equipment constraints
+  // Structure: { allowedTypes?: ExerciseType[], excludedTypes?: ExerciseType[] }
+  equipmentConstraints Json? @map("equipment_constraints")
+
+  // Default sets per exercise in this slot
+  defaultSets Int @default(3) @map("default_sets")
+
+  // Default rep range for exercises in this slot
+  defaultRepMin Int @default(8) @map("default_rep_min")
+  defaultRepMax Int @default(12) @map("default_rep_max")
+
+  // Notes for this slot
+  notes String?
+
+  // Unique constraint: each template can only have one slot per order index
+  @@unique([templateId, orderIndex])
+  // Index for efficient lookup
+  @@index([templateId])
+  @@map("workout_day_slots")
 }

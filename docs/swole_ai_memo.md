@@ -246,3 +246,36 @@
 - One active split per user: enforced at app level (deactivate all other splits before activating new one)
 - Verified: `prisma migrate status` shows "Database schema is up to date!"
 - Verified: `tsc --noEmit` passes with no errors
+
+### Task 2.5 — Add day templates schema (fixed + slot) ✅
+- Added `WorkoutDayTemplate` model in `prisma/schema.prisma` representing saved workout day configurations:
+  - `name` (String — e.g., "Push A", "Full Body")
+  - `mode` (enum: FIXED, SLOT) — determines how exercises are defined
+  - `defaultProgressionEngine` (enum: DOUBLE_PROGRESSION, STRAIGHT_SETS, TOP_SET_BACKOFF, RPE_BASED, NONE)
+  - `notes` (nullable String), `estimatedMinutes` (nullable Int)
+  - `userId` + `user` relation (cascade delete)
+  - `blocks` relation (for FIXED mode), `slots` relation (for SLOT mode), `scheduleDays` relation
+- Added `WorkoutDayBlock` model for FIXED template mode (explicit exercises):
+  - `templateId` + `template` relation (cascade delete)
+  - `orderIndex` (Int) with `@@unique([templateId, orderIndex])`
+  - `exerciseId` + `exercise` relation (onDelete: Restrict)
+  - `setsPlanned` (default 3), `repMin` (default 8), `repMax` (default 12), `restSeconds` (default 120)
+  - `progressionEngine` (nullable — override template default)
+  - `intensityTarget` (Json — {rpe?, rir?, percentOf1RM?}), `notes` (nullable)
+- Added `WorkoutDaySlot` model for SLOT template mode (muscle group placeholders):
+  - `templateId` + `template` relation (cascade delete)
+  - `orderIndex` (Int) with `@@unique([templateId, orderIndex])`
+  - `muscleGroup` (String — e.g., "chest", "back", "quads")
+  - `exerciseCount` (default 1) — number of exercises to fill for this muscle group
+  - `patternConstraints` (Json — {allowedPatterns?, excludedPatterns?})
+  - `equipmentConstraints` (Json — {allowedTypes?, excludedTypes?})
+  - `defaultSets` (default 3), `defaultRepMin` (default 8), `defaultRepMax` (default 12), `notes` (nullable)
+- Created two new enums: `TemplateMode` (FIXED, SLOT), `ProgressionEngine` (DOUBLE_PROGRESSION, STRAIGHT_SETS, TOP_SET_BACKOFF, RPE_BASED, NONE)
+- Updated `SplitScheduleDay` with proper foreign key relation to `WorkoutDayTemplate` (onDelete: SetNull)
+- Added `workoutDayTemplates` relation on User model
+- Added `workoutDayBlocks` relation on Exercise model
+- Added indexes: `[userId]` on workout_day_templates, `[templateId]` on blocks and slots
+- Migration file: `prisma/migrations/20260218001249_add_day_templates_schema/migration.sql`
+- Ran `prisma migrate dev --name add_day_templates_schema` → migration applied successfully
+- Template supports both modes: FIXED uses WorkoutDayBlock[], SLOT uses WorkoutDaySlot[]
+- Verified: No linter errors in schema file
