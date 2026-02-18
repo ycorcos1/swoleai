@@ -379,3 +379,24 @@
 - Returns 401 JSON response with `{ error: 'Unauthorized', message: 'Authentication required' }` when unauthenticated
 - Usage pattern documented in JSDoc with code examples
 - Verified: `npm run build` passes, `tsc --noEmit` passes, `npm run lint` clean
+
+### Task 3.2 — Exercises API: list + create custom ✅
+- Created `src/app/api/exercises/route.ts` with two endpoints:
+  - `GET /api/exercises` — lists exercises (system + user's custom)
+  - `POST /api/exercises` — creates a custom exercise owned by authenticated user
+- GET endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Returns system exercises (`isCustom=false`) + user's custom exercises (`isCustom=true, ownerUserId=userId`)
+  - Supports query filters: `customOnly`, `pattern`, `type`, `search` (partial name match, case-insensitive)
+  - Zod schema validation for query parameters
+  - Orders by isCustom (system first), then name ascending
+- POST endpoint features:
+  - Uses `requireAuth()` to get authenticated userId
+  - Zod schema validation for request body (name required, type/pattern/muscleGroups/equipmentTags/jointStressFlags optional with defaults)
+  - Duplicate name check per user (case-insensitive) → 409 Conflict
+  - Creates exercise with `isCustom=true` and `ownerUserId=userId`
+  - Returns 201 with created exercise object
+- Validation schemas:
+  - `listExercisesQuerySchema` — validates GET query params
+  - `createExerciseSchema` — validates POST body with ExerciseType and MovementPattern enums
+- Verified: `tsc --noEmit` passes, `eslint` clean
