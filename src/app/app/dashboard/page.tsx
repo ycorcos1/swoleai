@@ -1,16 +1,28 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 export default function DashboardPage() {
+  const [dateString, setDateString] = useState<string>('');
+
+  // Compute date on client side to use user's local timezone
+  useEffect(() => {
+    setDateString(
+      new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })
+    );
+  }, []);
+
   return (
     <div className="px-4 py-6">
       {/* Header */}
       <header className="mb-6">
         <p className="text-sm text-[var(--color-text-muted)]">
-          {new Date().toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}
+          {dateString || '\u00A0'}
         </p>
         <h1 className="mt-1 text-2xl font-bold">Dashboard</h1>
       </header>
