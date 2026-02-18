@@ -64,6 +64,18 @@ enum FavoritePriority {
   BACKUP
 }
 
+// Weekday enum (Task 2.4)
+// Maps to split schedule days for weekly programming
+enum Weekday {
+  SUNDAY    // 0
+  MONDAY    // 1
+  TUESDAY   // 2
+  WEDNESDAY // 3
+  THURSDAY  // 4
+  FRIDAY    // 5
+  SATURDAY  // 6
+}
+
 // =============================================================================
 // CORE MODELS
 // =============================================================================
@@ -94,6 +106,9 @@ model User {
   // Relations (Task 2.3)
   exercises Exercise[] // Custom exercises owned by this user
   favorites Favorite[] // User's favorite exercises
+
+  // Relations (Task 2.4)
+  splits Split[] // User's workout splits (program schedules)
 
   @@map("users")
 }
@@ -168,4 +183,72 @@ model Favorite {
   // Index for efficient lookup of user's favorites
   @@index([userId])
   @@map("favorites")
+}
+
+// =============================================================================
+// SPLITS + SCHEDULE (Task 2.4)
+// =============================================================================
+
+// Split model (Task 2.4)
+// Represents a workout program schedule (e.g., "Push/Pull/Legs", "Upper/Lower")
+// A user can have multiple splits but only one can be active at a time
+model Split {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Split name (e.g., "PPL 6-Day", "Upper/Lower")
+  name String
+
+  // Whether this split is currently active for the user
+  // Only one split per user should be active (enforced at app level)
+  // This drives the "Today" workout suggestion on Dashboard
+  isActive Boolean @default(false) @map("is_active")
+
+  // Owner relationship
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations
+  scheduleDays SplitScheduleDay[] // Days of the week mapped to templates or rest
+
+  // Index for efficient lookup of user's splits and active split
+  @@index([userId])
+  @@index([userId, isActive])
+  @@map("splits")
+}
+
+// SplitScheduleDay model (Task 2.4)
+// Maps a weekday to either a workout day template or a rest day
+// Part of a Split's weekly schedule
+model SplitScheduleDay {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Parent split
+  splitId String @map("split_id")
+  split   Split  @relation(fields: [splitId], references: [id], onDelete: Cascade)
+
+  // Day of the week (0=Sunday through 6=Saturday)
+  weekday Weekday
+
+  // Reference to workout day template (nullable if rest day)
+  // Note: WorkoutDayTemplate model will be added in Task 2.5
+  // For now, storing as nullable String ID for forward compatibility
+  workoutDayTemplateId String? @map("workout_day_template_id")
+
+  // Whether this is a rest day
+  // If true, workoutDayTemplateId should be null
+  isRest Boolean @default(false) @map("is_rest")
+
+  // Optional label for this day (e.g., "Push A", "Pull B", "Legs")
+  // Useful for display when template might not be assigned yet
+  label String?
+
+  // Unique constraint: each split can only have one entry per weekday
+  @@unique([splitId, weekday])
+  // Index for efficient lookup of split's schedule
+  @@index([splitId])
+  @@map("split_schedule_days")
 }

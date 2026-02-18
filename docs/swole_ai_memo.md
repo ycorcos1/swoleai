@@ -224,3 +224,25 @@
 - Ran `prisma migrate dev --name add_exercises_and_favorites` → migration applied successfully
 - Verified: Migration SQL includes `CREATE UNIQUE INDEX "favorites_user_id_exercise_id_key"` enforcing unique constraint
 - Verified: `tsc --noEmit` passes with no errors
+
+### Task 2.4 — Add splits + split schedule schema ✅
+- Added `Split` model in `prisma/schema.prisma` representing workout program schedules:
+  - `name` (String — e.g., "PPL 6-Day", "Upper/Lower")
+  - `isActive` (Boolean, default false) — drives Dashboard "Today" workout suggestion
+  - `userId` + `user` relation (cascade delete)
+  - `scheduleDays` relation to `SplitScheduleDay`
+- Added `SplitScheduleDay` model mapping weekdays to templates or rest:
+  - `splitId` + `split` relation (cascade delete)
+  - `weekday` (enum: SUNDAY through SATURDAY)
+  - `workoutDayTemplateId` (nullable String — will link to Task 2.5 WorkoutDayTemplate)
+  - `isRest` (Boolean, default false)
+  - `label` (nullable String — e.g., "Push A", "Legs")
+  - `@@unique([splitId, weekday])` — each split can only have one entry per weekday
+- Created `Weekday` enum: SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY
+- Added `splits` relation on User model
+- Added indexes: `[userId]` and `[userId, isActive]` on splits, `[splitId]` on split_schedule_days
+- Migration file: `prisma/migrations/20260218000906_add_splits_and_schedule/migration.sql`
+- Ran `prisma migrate dev --name add_splits_and_schedule` → migration applied successfully
+- One active split per user: enforced at app level (deactivate all other splits before activating new one)
+- Verified: `prisma migrate status` shows "Database schema is up to date!"
+- Verified: `tsc --noEmit` passes with no errors
