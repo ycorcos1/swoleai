@@ -1212,6 +1212,38 @@
 
 ---
 
+### Task 5.10 — End workout + summary screen ✅
+- **Prerequisite satisfied**: Task 5.3 (set logger + IndexedDB persistence) in place
+- **`src/lib/offline/db.ts`**:
+  - Added `CompletedWorkoutSummary` interface with fields: `id` (fixed `'last'`), `title`, `startedAt`, `endedAt`, `durationSeconds`, `exercises` (full snapshot), `totalSets`, `totalVolume`
+  - Added `completedWorkout` Dexie `EntityTable<CompletedWorkoutSummary, 'id'>` to `SwoleAIDatabase`
+  - Added schema version 2 (all previous tables retained + `completedWorkout: 'id'`) — Dexie handles migration automatically on next app open
+- **`src/lib/offline/useActiveSession.ts`**:
+  - Imported `CompletedWorkoutSummary` from `./db`
+  - Updated `endSession()`: before clearing the active session, snapshots the full session into a `CompletedWorkoutSummary` — computes `endedAt = new Date()`, `durationSeconds`, iterates all exercises/sets to compute `totalSets` (sets where weight > 0 or reps > 0) and `totalVolume` (sum of `weight × reps`), writes the record to `db.completedWorkout.put({ id: 'last', … })`; then clears the active session and undo stack as before
+  - End-session mutation enqueue for server sync remains unchanged
+- **`src/app/app/workout/session/[id]/page.tsx`**:
+  - `handleConfirmEndWorkout` now routes to `/app/workout/summary` (instead of `/app/workout/start`) after `endSession()` resolves
+- **`src/app/app/workout/summary/page.tsx`** *(new file)*:
+  - `WorkoutSummaryPage` — reads `db.completedWorkout.get('last')` via `useLiveQuery`; a `hasResolved` state flag (set on first non-`undefined` return from Dexie) gates a brief loading spinner vs. the no-summary fallback
+  - **Completion header**: gradient `CheckCircle2` icon, "Workout Complete!" heading, session title (fallback: "Freestyle Workout"), formatted `endedAt` timestamp
+  - **Stats row** (`GlassCard`): three `StatBadge` columns separated by dividers — Duration (`formatDuration` → `"Xh Ym"` / `"Ym Zs"`), Sets (count of logged sets), Volume (`"N,NNN lbs"`)
+  - **Exercise breakdown**: exercises sorted by `orderIndex`; each rendered via `ExerciseSummaryCard` — numbered gradient badge, exercise name, best-set indicator (`TrendingUp` icon + `weight×reps`), set pills matching the Workout Mode style (weight×reps + W/B/D/F flag badges); empty-set fallback text
+  - **Empty workout state**: shown when no exercises logged
+  - **NoSummaryState**: shown if no completed workout exists in IndexedDB (e.g. navigating to summary URL directly)
+  - **Action buttons**:
+    - **Generate Next Session Plan** (primary `btn-primary`, `Sparkles` icon) → `/app/coach` (placeholder for future AI coach task)
+    - **Done** (secondary glass button, `LayoutDashboard` icon) → `router.replace('/app/dashboard')`
+- **Data flow** (End + Summary):
+  - User taps **End** → `ConfirmModal` → `handleConfirmEndWorkout` → `endSession()` → snapshot written to `db.completedWorkout` → active session cleared → route to `/app/workout/summary` → `useLiveQuery` reads `completedWorkout` → full summary rendered
+- **Acceptance criteria verified**:
+  - Ending records end time ✓ (`endedAt` + `durationSeconds` stored before clearing session)
+  - Shows summary ✓ (summary page reads snapshot from IndexedDB, renders stats + exercise breakdown)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors on all changed files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.

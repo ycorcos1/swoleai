@@ -207,6 +207,34 @@ export interface UndoAction {
   payload: UndoActionPayload;
 }
 
+// =============================================================================
+// COMPLETED WORKOUT SUMMARY (Task 5.10)
+// =============================================================================
+
+/**
+ * Snapshot of a completed workout session, stored after ending a workout.
+ * Enables the summary screen to display stats after the active session is cleared.
+ * Only the most recent completed workout is kept (id = 'last').
+ */
+export interface CompletedWorkoutSummary {
+  /** Fixed key — only the most recent completed workout is stored */
+  id: 'last';
+  /** Session title */
+  title?: string;
+  /** When the workout started */
+  startedAt: Date;
+  /** When the workout ended */
+  endedAt: Date;
+  /** Duration in seconds */
+  durationSeconds: number;
+  /** All exercises with their sets at time of completion */
+  exercises: ActiveSessionExercise[];
+  /** Pre-computed stats */
+  totalSets: number;
+  /** Total volume = sum of (weight × reps) for all sets */
+  totalVolume: number;
+}
+
 /**
  * Pending mutation for sync queue
  * Operations are processed in order when online
@@ -257,6 +285,12 @@ export class SwoleAIDatabase extends Dexie {
    */
   pendingMutations!: EntityTable<PendingMutation, 'id'>;
 
+  /**
+   * Last completed workout summary (Task 5.10)
+   * Primary key: id (always 'last' — single record)
+   */
+  completedWorkout!: EntityTable<CompletedWorkoutSummary, 'id'>;
+
   constructor() {
     super('SwoleAI');
 
@@ -268,6 +302,14 @@ export class SwoleAIDatabase extends Dexie {
       setEvents: '++id, serverSessionId, synced, timestamp, localExerciseId',
       // pendingMutations: auto-increment id, indexed by status and createdAt for ordered processing
       pendingMutations: '++id, status, createdAt, type',
+    });
+
+    // Schema version 2: Add completedWorkout table (Task 5.10)
+    this.version(2).stores({
+      activeSession: 'id',
+      setEvents: '++id, serverSessionId, synced, timestamp, localExerciseId',
+      pendingMutations: '++id, status, createdAt, type',
+      completedWorkout: 'id',
     });
   }
 }

@@ -396,8 +396,8 @@ export default function WorkoutSessionPage() {
     try {
       await endSession();
       setShowEndWorkoutModal(false);
-      // Navigate to workout summary (Task 5.x) or back to start
-      router.replace('/app/workout/start');
+      // Task 5.10: Navigate to workout summary screen
+      router.replace('/app/workout/summary');
     } catch (error) {
       console.error('Failed to end workout:', error);
       setIsEndingWorkout(false);

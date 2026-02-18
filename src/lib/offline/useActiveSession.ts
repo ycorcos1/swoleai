@@ -14,6 +14,7 @@ import {
   type ActiveSession,
   type ActiveSessionExercise,
   type ActiveSessionSet,
+  type CompletedWorkoutSummary,
 } from './db';
 import {
   saveActiveSession,
@@ -195,9 +196,44 @@ export function useActiveSession(): UseActiveSessionReturn {
     try {
       setError(null);
 
-      // Get the session before clearing to get server ID
+      // Get the session before clearing to get server ID and snapshot summary (Task 5.10)
       const current = await getActiveSession();
       const serverSessionId = current?.serverSessionId;
+
+      // === Task 5.10: Record end time and snapshot summary ===
+      if (current) {
+        const endedAt = new Date();
+        const durationSeconds = Math.floor(
+          (endedAt.getTime() - current.startedAt.getTime()) / 1000
+        );
+
+        // Pre-compute stats
+        let totalSets = 0;
+        let totalVolume = 0;
+        for (const exercise of current.exercises) {
+          for (const set of exercise.sets) {
+            if (set.weight > 0 || set.reps > 0) {
+              totalSets += 1;
+              totalVolume += set.weight * set.reps;
+            }
+          }
+        }
+
+        const summary: CompletedWorkoutSummary = {
+          id: 'last',
+          title: current.title,
+          startedAt: current.startedAt,
+          endedAt,
+          durationSeconds,
+          exercises: current.exercises,
+          totalSets,
+          totalVolume,
+        };
+
+        // Persist summary to IndexedDB before clearing active session
+        await db.completedWorkout.put(summary);
+      }
+      // =======================================================
 
       await clearActiveSession();
       
