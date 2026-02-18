@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Clock,
   TrendingUp,
+  Undo2,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
 import { SetLoggerSheet } from '@/components/workout';
@@ -320,11 +321,13 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, logSet, updateSet } = useActiveSessionContext();
+  const { session, isLoading, endSession, logSet, updateSet, canUndo, undoLastAction } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  // Undo state (Task 5.5)
+  const [isUndoing, setIsUndoing] = useState(false);
   
   // Set Logger sheet state
   const [selectedExercise, setSelectedExercise] = useState<ActiveSessionExercise | null>(null);
@@ -347,6 +350,23 @@ export default function WorkoutSessionPage() {
     setIsTimerActive((prev) => !prev);
     console.log('Timer toggled - implement in Task 5.7');
   }, []);
+
+  // Undo handler (Task 5.5)
+  const handleUndo = useCallback(async () => {
+    if (isUndoing || !canUndo) return;
+    
+    setIsUndoing(true);
+    try {
+      const undoneAction = await undoLastAction();
+      if (undoneAction) {
+        console.log('Undid action:', undoneAction.payload.type);
+      }
+    } catch (error) {
+      console.error('Failed to undo:', error);
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [isUndoing, canUndo, undoLastAction]);
 
   const handleEndWorkout = useCallback(() => {
     if (isEndingWorkout) return;
@@ -460,8 +480,25 @@ export default function WorkoutSessionPage() {
             <ElapsedTime startedAt={session.startedAt} />
           </div>
 
-          {/* Right: Sync Pill + Menu */}
+          {/* Right: Undo + Sync Pill + Menu */}
           <div className="flex items-center gap-2">
+            {/* Undo Button (Task 5.5) */}
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo || isUndoing}
+              className={`
+                flex h-10 w-10 items-center justify-center rounded-lg transition-all
+                ${canUndo && !isUndoing
+                  ? 'bg-[var(--color-base-600)] hover:bg-[var(--color-base-500)] active:scale-95'
+                  : 'opacity-40 cursor-not-allowed'
+                }
+              `}
+              aria-label="Undo last action"
+            >
+              <Undo2 
+                className={`h-5 w-5 text-[var(--color-text-primary)] ${isUndoing ? 'animate-pulse' : ''}`} 
+              />
+            </button>
             <SyncStatusPill showCount={false} />
             <button
               className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--color-base-600)] transition-colors"

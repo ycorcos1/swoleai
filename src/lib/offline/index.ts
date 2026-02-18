@@ -14,6 +14,13 @@ export type {
   SetEvent,
   PendingMutation,
   MutationType,
+  // Undo types (Task 5.5)
+  UndoActionType,
+  UndoLogSetPayload,
+  UndoUpdateSetPayload,
+  UndoDeleteSetPayload,
+  UndoActionPayload,
+  UndoAction,
 } from './db';
 
 // Session persistence functions (Task 4.2)
@@ -29,6 +36,14 @@ export {
   addSetToExercise,
   updateSetInExercise,
   removeSetFromExercise,
+  // Undo stack functions (Task 5.5)
+  pushUndoAction,
+  popUndoAction,
+  peekUndoAction,
+  hasUndoActions,
+  getUndoStackLength,
+  clearUndoStack,
+  executeUndo,
 } from './session';
 
 // Session React hook (Task 4.2)

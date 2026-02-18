@@ -144,6 +144,69 @@ export type MutationType =
   | 'REORDER_EXERCISES'
   | 'UPDATE_SESSION_NOTES';
 
+// =============================================================================
+// UNDO STACK TYPES (Task 5.5)
+// =============================================================================
+
+/**
+ * Undo action types - actions that can be undone
+ */
+export type UndoActionType = 'LOG_SET' | 'UPDATE_SET' | 'DELETE_SET';
+
+/**
+ * Undo action payload for LOG_SET - to undo, we need to remove the set
+ */
+export interface UndoLogSetPayload {
+  type: 'LOG_SET';
+  exerciseLocalId: string;
+  setLocalId: string;
+}
+
+/**
+ * Undo action payload for UPDATE_SET - to undo, we restore previous values
+ */
+export interface UndoUpdateSetPayload {
+  type: 'UPDATE_SET';
+  exerciseLocalId: string;
+  setLocalId: string;
+  previousValues: {
+    weight: number;
+    reps: number;
+    rpe?: number;
+    flags?: ActiveSessionSet['flags'];
+    notes?: string;
+  };
+}
+
+/**
+ * Undo action payload for DELETE_SET - to undo, we restore the deleted set
+ */
+export interface UndoDeleteSetPayload {
+  type: 'DELETE_SET';
+  exerciseLocalId: string;
+  deletedSet: ActiveSessionSet;
+}
+
+/**
+ * Union type for all undo payloads
+ */
+export type UndoActionPayload =
+  | UndoLogSetPayload
+  | UndoUpdateSetPayload
+  | UndoDeleteSetPayload;
+
+/**
+ * Undo action stored in the undo stack
+ */
+export interface UndoAction {
+  /** Unique ID for the action */
+  id: string;
+  /** Timestamp when action was performed */
+  timestamp: Date;
+  /** The undo payload containing data needed to reverse the action */
+  payload: UndoActionPayload;
+}
+
 /**
  * Pending mutation for sync queue
  * Operations are processed in order when online

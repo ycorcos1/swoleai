@@ -5,7 +5,7 @@
  * Enables workout continuation after app reload/crash.
  */
 
-import { db, type ActiveSession, type ActiveSessionExercise, type ActiveSessionSet } from './db';
+import { db, type ActiveSession, type ActiveSessionExercise, type ActiveSessionSet, type UndoAction, type UndoActionPayload } from './db';
 
 // =============================================================================
 // SESSION PERSISTENCE FUNCTIONS
@@ -313,4 +313,180 @@ export async function removeSetFromExercise(
     exercises: updatedExercises,
     updatedAt: new Date(),
   });
+}
+
+// =============================================================================
+// UNDO STACK MANAGEMENT (Task 5.5)
+// =============================================================================
+
+/**
+ * Maximum number of undo actions to keep in the stack
+ * Keep it small to minimize memory usage during workouts
+ */
+const MAX_UNDO_STACK_SIZE = 10;
+
+/**
+ * In-memory undo stack for the current session
+ * We use in-memory storage because:
+ * 1. Undo actions are transient (only for current session)
+ * 2. Fast access for UI responsiveness
+ * 3. Cleared when session ends
+ */
+let undoStack: UndoAction[] = [];
+
+/**
+ * Generate a unique ID for an undo action
+ */
+function generateUndoId(): string {
+  return `undo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Push an action to the undo stack
+ *
+ * @param payload - The undo action payload
+ */
+export function pushUndoAction(payload: UndoActionPayload): void {
+  const action: UndoAction = {
+    id: generateUndoId(),
+    timestamp: new Date(),
+    payload,
+  };
+
+  undoStack.push(action);
+
+  // Trim stack if it exceeds max size
+  if (undoStack.length > MAX_UNDO_STACK_SIZE) {
+    undoStack = undoStack.slice(-MAX_UNDO_STACK_SIZE);
+  }
+}
+
+/**
+ * Pop the last action from the undo stack
+ *
+ * @returns The last undo action or undefined if stack is empty
+ */
+export function popUndoAction(): UndoAction | undefined {
+  return undoStack.pop();
+}
+
+/**
+ * Peek at the last action without removing it
+ *
+ * @returns The last undo action or undefined if stack is empty
+ */
+export function peekUndoAction(): UndoAction | undefined {
+  return undoStack.length > 0 ? undoStack[undoStack.length - 1] : undefined;
+}
+
+/**
+ * Check if there are any actions to undo
+ *
+ * @returns True if the undo stack is not empty
+ */
+export function hasUndoActions(): boolean {
+  return undoStack.length > 0;
+}
+
+/**
+ * Get the current undo stack length
+ *
+ * @returns The number of actions in the undo stack
+ */
+export function getUndoStackLength(): number {
+  return undoStack.length;
+}
+
+/**
+ * Clear the entire undo stack
+ * Called when session ends or is abandoned
+ */
+export function clearUndoStack(): void {
+  undoStack = [];
+}
+
+/**
+ * Execute an undo action - reverses the last logged set action
+ *
+ * This function:
+ * 1. Pops the last action from the undo stack
+ * 2. Reverses the action by modifying the active session
+ * 3. Does NOT enqueue a sync mutation (handled by caller if needed)
+ *
+ * @returns Promise resolving to the undone action, or undefined if stack was empty
+ * @throws Error if the undo operation fails
+ */
+export async function executeUndo(): Promise<UndoAction | undefined> {
+  const action = popUndoAction();
+  if (!action) {
+    return undefined;
+  }
+
+  const current = await getActiveSession();
+  if (!current) {
+    throw new Error('No active session to undo in');
+  }
+
+  const { payload } = action;
+
+  switch (payload.type) {
+    case 'LOG_SET': {
+      // Undo LOG_SET: Remove the set that was logged
+      await removeSetFromExercise(payload.exerciseLocalId, payload.setLocalId);
+      break;
+    }
+
+    case 'UPDATE_SET': {
+      // Undo UPDATE_SET: Restore previous values
+      await updateSetInExercise(
+        payload.exerciseLocalId,
+        payload.setLocalId,
+        payload.previousValues
+      );
+      break;
+    }
+
+    case 'DELETE_SET': {
+      // Undo DELETE_SET: Re-add the deleted set
+      // We need to insert it at the correct position (using original setIndex)
+      const exerciseIndex = current.exercises.findIndex(
+        (e) => e.localId === payload.exerciseLocalId
+      );
+
+      if (exerciseIndex === -1) {
+        throw new Error(`Exercise with localId ${payload.exerciseLocalId} not found for undo`);
+      }
+
+      const updatedExercises = [...current.exercises];
+      const currentSets = [...updatedExercises[exerciseIndex].sets];
+      
+      // Insert the deleted set back at its original position
+      const insertIndex = Math.min(payload.deletedSet.setIndex, currentSets.length);
+      currentSets.splice(insertIndex, 0, payload.deletedSet);
+      
+      // Reindex all sets
+      currentSets.forEach((s, idx) => {
+        s.setIndex = idx;
+      });
+
+      updatedExercises[exerciseIndex] = {
+        ...updatedExercises[exerciseIndex],
+        sets: currentSets,
+      };
+
+      await db.activeSession.update('current', {
+        exercises: updatedExercises,
+        updatedAt: new Date(),
+      });
+      break;
+    }
+
+    default: {
+      // TypeScript exhaustiveness check
+      const _exhaustiveCheck: never = payload;
+      throw new Error(`Unknown undo action type: ${(_exhaustiveCheck as UndoActionPayload).type}`);
+    }
+  }
+
+  return action;
 }

@@ -25,9 +25,15 @@ import {
   addSetToExercise,
   updateSetInExercise,
   removeSetFromExercise,
+  // Undo stack functions (Task 5.5)
+  pushUndoAction,
+  hasUndoActions,
+  executeUndo,
+  clearUndoStack,
 } from './session';
 import { enqueueMutation } from './mutations';
 import { syncService } from './sync';
+import type { UndoAction } from './db';
 
 // =============================================================================
 // TYPES
@@ -69,6 +75,13 @@ export interface UseActiveSessionReturn {
     title?: string;
     constraintFlags?: ActiveSession['constraintFlags'];
   }) => Promise<void>;
+  // =============================================================================
+  // UNDO SUPPORT (Task 5.5)
+  // =============================================================================
+  /** Whether there are actions that can be undone */
+  canUndo: boolean;
+  /** Undo the last logged set action */
+  undoLastAction: () => Promise<UndoAction | undefined>;
 }
 
 export interface StartSessionOptions {
@@ -99,6 +112,8 @@ export interface StartSessionOptions {
 export function useActiveSession(): UseActiveSessionReturn {
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
+  // Track whether undo actions are available (Task 5.5)
+  const [canUndo, setCanUndo] = useState(false);
 
   // Use Dexie's live query for reactive updates
   // This will automatically update when the session changes in IndexedDB
@@ -179,6 +194,12 @@ export function useActiveSession(): UseActiveSessionReturn {
       const serverSessionId = current?.serverSessionId;
 
       await clearActiveSession();
+      
+      // Clear undo stack when session ends (Task 5.5)
+      clearUndoStack();
+      if (mountedRef.current) {
+        setCanUndo(false);
+      }
 
       // Enqueue mutation for server sync (only if we have a server session ID)
       if (serverSessionId) {
@@ -299,6 +320,16 @@ export function useActiveSession(): UseActiveSessionReturn {
           loggedAt,
         });
 
+        // Push undo action (Task 5.5)
+        pushUndoAction({
+          type: 'LOG_SET',
+          exerciseLocalId,
+          setLocalId: set.localId,
+        });
+        if (mountedRef.current) {
+          setCanUndo(hasUndoActions());
+        }
+
         // Enqueue mutation for server sync (only if we have a server session ID)
         if (current?.serverSessionId && exercise) {
           await enqueueMutation('LOG_SET', {
@@ -334,6 +365,29 @@ export function useActiveSession(): UseActiveSessionReturn {
         setError(null);
         const current = await getActiveSession();
 
+        // Find the current set to save previous values for undo (Task 5.5)
+        const exercise = current?.exercises.find((e) => e.localId === exerciseLocalId);
+        const setToUpdate = exercise?.sets.find((s) => s.localId === setLocalId);
+        
+        if (setToUpdate) {
+          // Push undo action with previous values before updating
+          pushUndoAction({
+            type: 'UPDATE_SET',
+            exerciseLocalId,
+            setLocalId,
+            previousValues: {
+              weight: setToUpdate.weight,
+              reps: setToUpdate.reps,
+              rpe: setToUpdate.rpe,
+              flags: setToUpdate.flags,
+              notes: setToUpdate.notes,
+            },
+          });
+          if (mountedRef.current) {
+            setCanUndo(hasUndoActions());
+          }
+        }
+
         await updateSetInExercise(exerciseLocalId, setLocalId, updates);
 
         // Enqueue mutation for server sync (only if we have a server session ID)
@@ -361,6 +415,22 @@ export function useActiveSession(): UseActiveSessionReturn {
       try {
         setError(null);
         const current = await getActiveSession();
+
+        // Find the set to save for undo before deleting (Task 5.5)
+        const exercise = current?.exercises.find((e) => e.localId === exerciseLocalId);
+        const setToDelete = exercise?.sets.find((s) => s.localId === setLocalId);
+        
+        if (setToDelete) {
+          // Push undo action with the full deleted set data
+          pushUndoAction({
+            type: 'DELETE_SET',
+            exerciseLocalId,
+            deletedSet: { ...setToDelete },
+          });
+          if (mountedRef.current) {
+            setCanUndo(hasUndoActions());
+          }
+        }
 
         await removeSetFromExercise(exerciseLocalId, setLocalId);
 
@@ -425,6 +495,41 @@ export function useActiveSession(): UseActiveSessionReturn {
     []
   );
 
+  // =============================================================================
+  // UNDO OPERATIONS (Task 5.5)
+  // =============================================================================
+
+  /**
+   * Undo the last logged set action
+   * 
+   * Supports undoing:
+   * - LOG_SET: Removes the set that was logged
+   * - UPDATE_SET: Restores previous values
+   * - DELETE_SET: Re-adds the deleted set
+   * 
+   * @returns The undone action, or undefined if nothing to undo
+   */
+  const undoLastAction = useCallback(async (): Promise<UndoAction | undefined> => {
+    try {
+      setError(null);
+      
+      const undoneAction = await executeUndo();
+      
+      // Update canUndo state after the undo
+      if (mountedRef.current) {
+        setCanUndo(hasUndoActions());
+      }
+      
+      return undoneAction;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to undo');
+      if (mountedRef.current) {
+        setError(error);
+      }
+      throw error;
+    }
+  }, []);
+
   return {
     session,
     isLoading,
@@ -438,5 +543,8 @@ export function useActiveSession(): UseActiveSessionReturn {
     updateSet,
     removeSet,
     updateSessionMeta,
+    // Undo support (Task 5.5)
+    canUndo,
+    undoLastAction,
   };
 }

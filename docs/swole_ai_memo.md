@@ -1033,3 +1033,56 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `read_lints` returns no errors
 - Verified: `npm run build` succeeds — all files compile correctly
+
+### Task 5.5 — Undo last action ✅
+- **New Undo Types in `src/lib/offline/db.ts`**:
+  - `UndoActionType` — union of undoable actions: `'LOG_SET' | 'UPDATE_SET' | 'DELETE_SET'`
+  - `UndoLogSetPayload` — stores `exerciseLocalId` + `setLocalId` to remove on undo
+  - `UndoUpdateSetPayload` — stores `exerciseLocalId` + `setLocalId` + `previousValues` (weight, reps, rpe, flags, notes)
+  - `UndoDeleteSetPayload` — stores `exerciseLocalId` + full `deletedSet` object for restoration
+  - `UndoActionPayload` — union type of all undo payloads
+  - `UndoAction` — action stored in stack with `id`, `timestamp`, `payload`
+- **Undo Stack Functions in `src/lib/offline/session.ts`**:
+  - In-memory `undoStack: UndoAction[]` (cleared on session end)
+  - `MAX_UNDO_STACK_SIZE = 10` — bounded for memory safety
+  - `pushUndoAction(payload)` — adds action, trims if exceeds max
+  - `popUndoAction()` — removes and returns last action
+  - `peekUndoAction()` — returns last action without removing
+  - `hasUndoActions()` — boolean check for empty stack
+  - `getUndoStackLength()` — returns stack size
+  - `clearUndoStack()` — clears entire stack (called on session end)
+  - `executeUndo()` — pops action and reverses it:
+    - `LOG_SET` → calls `removeSetFromExercise()` to delete the logged set
+    - `UPDATE_SET` → calls `updateSetInExercise()` with `previousValues`
+    - `DELETE_SET` → re-inserts `deletedSet` at original `setIndex` position
+- **Updated `src/lib/offline/useActiveSession.ts`**:
+  - Added `canUndo` state (boolean) — tracks if undo stack is non-empty
+  - Added `undoLastAction()` function — calls `executeUndo()` and updates `canUndo` state
+  - Modified `logSet()` — pushes `UndoLogSetPayload` after adding set
+  - Modified `updateSet()` — captures current values, pushes `UndoUpdateSetPayload` before updating
+  - Modified `removeSet()` — captures full set data, pushes `UndoDeleteSetPayload` before deleting
+  - Modified `endSession()` — calls `clearUndoStack()` and resets `canUndo` to false
+  - Added `canUndo` and `undoLastAction` to `UseActiveSessionReturn` interface
+- **Updated `src/app/app/workout/session/[id]/page.tsx`**:
+  - Added `Undo2` icon import from lucide-react
+  - Added `isUndoing` state for loading indicator
+  - Destructured `canUndo` and `undoLastAction` from `useActiveSessionContext()`
+  - Added `handleUndo()` handler — calls `undoLastAction()` with loading state
+  - Added Undo button in top bar header (next to SyncStatusPill):
+    - Shows `Undo2` icon
+    - Enabled/disabled based on `canUndo` state
+    - Disabled styling (opacity 40%, cursor not-allowed) when no undo available
+    - Active styling with hover/active states
+    - `animate-pulse` on icon during undo operation
+- **Updated `src/lib/offline/index.ts`**:
+  - Exported all new undo types: `UndoActionType`, `UndoLogSetPayload`, `UndoUpdateSetPayload`, `UndoDeleteSetPayload`, `UndoActionPayload`, `UndoAction`
+  - Exported all undo functions: `pushUndoAction`, `popUndoAction`, `peekUndoAction`, `hasUndoActions`, `getUndoStackLength`, `clearUndoStack`, `executeUndo`
+- **Acceptance criteria verified**:
+  - Undo restores prior state safely ✓
+    - LOG_SET undo → removes the set from session
+    - UPDATE_SET undo → restores previous weight/reps/rpe/flags/notes
+    - DELETE_SET undo → re-inserts set at original position
+  - Stack bounded to 10 actions ✓ (memory safe)
+  - Stack cleared on session end ✓
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `eslint` passes with no errors (1 pre-existing warning)
