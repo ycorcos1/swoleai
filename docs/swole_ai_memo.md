@@ -400,3 +400,20 @@
   - `listExercisesQuerySchema` — validates GET query params
   - `createExerciseSchema` — validates POST body with ExerciseType and MovementPattern enums
 - Verified: `tsc --noEmit` passes, `eslint` clean
+
+### Task 3.3 — Favorites API: toggle ✅
+- Created `src/app/api/favorites/[exerciseId]/route.ts` with toggle endpoint:
+  - `POST /api/favorites/:exerciseId` — toggles favorite status for an exercise
+- Toggle behavior (idempotent):
+  - If not favorited: creates favorite with provided priority/tags → returns `{ favorited: true, exerciseId, favorite: {...} }`
+  - If already favorited: deletes favorite → returns `{ favorited: false, exerciseId }`
+- Uses `requireAuth()` to get authenticated userId
+- Validates exerciseId param exists and exercise is accessible (system OR user's custom)
+- Zod schema validation for optional request body:
+  - `priority` (FavoritePriority: PRIMARY, BACKUP) — default PRIMARY
+  - `tags` (string array) — default []
+- Uses Prisma `@@unique([userId, exerciseId])` constraint on Favorite model for guaranteed uniqueness
+- Returns 404 if exercise not found or not accessible
+- Returns 401 if unauthenticated
+- Verified: `tsc --noEmit` passes, `eslint` clean
+- Verified: `next build` succeeds with `/api/favorites/[exerciseId]` registered as dynamic route
