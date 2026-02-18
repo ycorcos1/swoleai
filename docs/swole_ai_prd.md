@@ -345,7 +345,7 @@ Authenticated:
 **MVP (ship fast)**
 - Auth + onboarding + active split
 - Routine Studio (splits + day templates)
-- Workout Mode with core usability (edit/undo/continue) + rest timer
+- Workout Mode with core usability (edit/undo/continue) ~~+ rest timer~~ *(rest timer deferred — see §12)*
 - Deterministic substitution
 - Basic progression engine (double progression)
 - AI: Next Session Plan + Weekly Check-in (limited)
@@ -389,6 +389,16 @@ Authenticated:
 
 ---
 
-## 15. References
+## 15. Deferred Features
+
+Features that were originally scoped but intentionally removed from the current build. Listed here for future reconsideration.
+
+| Feature | Original Scope | Reason Deferred | Task Ref |
+|---|---|---|---|
+| Rest timer (auto-start + quick adjust) | MVP — Workout Mode | Adds UI complexity before core logging is proven stable; can be revisited once Task 5.3–5.6 are solid | Task 5.7 |
+
+---
+
+## 16. References
 - Existing user flow and screen map diagrams are maintained in `/docs/diagrams`.
 

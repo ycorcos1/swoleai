@@ -1136,3 +1136,52 @@
   - Flags are displayed ✓ (set pills show W/B/D/F badges, edit mode pre-fills flags)
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `read_lints` returns no errors on changed files
+
+### Task 5.8 — Add exercise mid-workout ✅
+- **New API endpoint `src/app/api/favorites/route.ts`** — `GET /api/favorites`:
+  - Returns all of the authenticated user's favorites with full exercise details (id, name, type, pattern, muscleGroups, isCustom) joined via Prisma `include`
+  - Ordered `priority: 'desc'` so PRIMARY favorites appear before BACKUP (alphabetically `BACKUP < PRIMARY`, so desc puts PRIMARY first), then by `createdAt: 'asc'`
+  - Protected by `requireAuth()` — returns 401 if unauthenticated
+- **New component `src/components/workout/AddExerciseSheet.tsx`**:
+  - Bottom sheet (same visual pattern as `SetLoggerSheet`) — handle bar, header, close button
+  - **Search input**: full-width, auto-focused after data loads, client-side filter over fetched exercise list
+  - **Data fetching**: on `isOpen` becoming `true`, fetches `GET /api/exercises` and `GET /api/favorites` in parallel; resets `query` to `''` on close
+  - **Favorites section**: exercises from the user's favorites list that match the search query are rendered first under a sticky "⭐ Favorites" section header; each row shows a filled gold `Star` icon
+  - **All Exercises section**: non-favorite exercises matching the query appear below under "All Exercises" (or "Exercises" when no favorites section is visible)
+  - **ExerciseRow subcomponent**: shows exercise name + muscle groups preview (up to 2, then "+N more"), star or dumbbell icon, and a `Plus` icon right-side; shows per-row `Loader2` spinner while that exercise is being added
+  - **Already-added indicator**: exercises already in the active session (matched by `exerciseId`) show an "Added" badge and are disabled — prevents duplicates while still allowing the user to see what's in the session
+  - **Add flow**: tapping a row generates a `localId` (`ex_${Date.now()}_${random}`), calls `onAddExercise({ localId, exerciseId, exerciseName })`, and closes the sheet on success; keeps sheet open on error so the user can retry
+  - **Empty state**: `Dumbbell` icon + "No exercises found" message; search hint shown when a query is active
+  - **Loading state**: centered `Loader2` spinner while fetching
+  - Sheet max-height capped at 85 vh with `overflow-y-auto` on the list for comfortable scrolling on any screen size
+- **Updated `src/components/workout/index.ts`**:
+  - Exported `AddExerciseSheet` component and `AddExerciseSheetProps` type
+- **Updated `src/app/app/workout/session/[id]/page.tsx`**:
+  - Imported `AddExerciseSheet` from `@/components/workout`
+  - Destructured `addExercise` from `useActiveSessionContext()`
+  - Added `showAddExerciseSheet` state (`boolean`)
+  - Replaced the placeholder `handleAddExercise` (`console.log`) with `setShowAddExerciseSheet(true)`
+  - Rendered `<AddExerciseSheet>` at the bottom of the page — wired to `addExercise` from context; passes `currentExerciseIds` derived from `session.exercises.map(e => e.exerciseId)` for "already added" detection
+  - Both the bottom bar "Add" button and the empty-state "Add Exercise" button now correctly open the sheet
+- **Data flow** (Add):
+  - User taps "Add" → `AddExerciseSheet` opens → fetches exercises + favorites → user searches + selects → `addExercise({ localId, exerciseId, exerciseName })` → `addExerciseToSession()` (IndexedDB) + `enqueueMutation('ADD_EXERCISE')` (sync queue) → Dexie `useLiveQuery` triggers re-render → new `ExerciseCard` appears in session view → user taps card to open `SetLoggerSheet` and log sets
+- **Acceptance criteria verified**:
+  - User can add a new exercise mid-workout ✓ (AddExerciseSheet → addExercise() → IndexedDB write → reactive UI update)
+  - New exercise appears as an ExerciseCard and sets can be logged immediately ✓
+  - Favorites are pinned to the top of the list ✓ (dedicated section above "All Exercises")
+  - Search filters both sections simultaneously ✓
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors on all changed files
+
+---
+
+## Deferred Features Log
+
+Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
+
+### ⛔ Task 5.7 — Rest Timer (auto-start + quick adjust)
+- **Deferred**: Feb 18, 2026
+- **Original scope**: MVP — Workout Mode. Rest timer was to auto-start on set log with quick ±15s adjust buttons.
+- **Reason**: Adds UI and state complexity (timer lifecycle, background behaviour, edge cases around app minimise/resume) before core workout logging (Tasks 5.3–5.6) has been validated in real use. Shipping a broken or janky timer would be worse than shipping without one.
+- **Reconsider when**: Tasks 5.3–5.9 are stable in production and user feedback identifies rest timing as a pain point.
+- **PRD reference**: §11 (MVP scope), §15 (Deferred Features table).

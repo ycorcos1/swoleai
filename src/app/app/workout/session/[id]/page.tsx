@@ -35,7 +35,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
-import { SetLoggerSheet } from '@/components/workout';
+import { SetLoggerSheet, AddExerciseSheet } from '@/components/workout';
 
 // =============================================================================
 // TYPES
@@ -326,7 +326,7 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, logSet, updateSet, canUndo, undoLastAction } = useActiveSessionContext();
+  const { session, isLoading, endSession, addExercise, logSet, updateSet, canUndo, undoLastAction } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
@@ -339,15 +339,16 @@ export default function WorkoutSessionPage() {
   const [showSetLoggerSheet, setShowSetLoggerSheet] = useState(false);
   // Edit mode state (Task 5.4)
   const [editingSet, setEditingSet] = useState<ActiveSessionSet | null>(null);
+  // Add Exercise sheet state (Task 5.8)
+  const [showAddExerciseSheet, setShowAddExerciseSheet] = useState(false);
 
   // =============================================================================
   // HANDLERS
   // =============================================================================
 
+  // Handler to open the Add Exercise sheet (Task 5.8)
   const handleAddExercise = useCallback(() => {
-    // TODO: Task 5.3+ - Open Add Exercise modal/sheet
-    // For now, this is a placeholder
-    console.log('Add Exercise tapped - implement in Task 5.3+');
+    setShowAddExerciseSheet(true);
   }, []);
 
   const handleToggleTimer = useCallback(() => {
@@ -567,6 +568,14 @@ export default function WorkoutSessionPage() {
           editingSet={editingSet ?? undefined}
         />
       )}
+
+      {/* Add Exercise Sheet (Task 5.8) */}
+      <AddExerciseSheet
+        isOpen={showAddExerciseSheet}
+        onClose={() => setShowAddExerciseSheet(false)}
+        onAddExercise={addExercise}
+        currentExerciseIds={session?.exercises.map((e) => e.exerciseId) ?? []}
+      />
     </div>
   );
 }

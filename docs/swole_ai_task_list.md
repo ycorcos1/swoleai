@@ -487,8 +487,10 @@
 
 ---
 
-### Task 5.7 — Rest timer (auto-start + quick adjust)
+### Task 5.7 — Rest timer (auto-start + quick adjust) ⛔ DEFERRED
 **Prerequisites**: Task 5.3.
+
+> **Deferred**: Rest timer feature is intentionally skipped for now. It will be reconsidered in a future iteration once core workout logging is stable. See PRD §11 and memo for context.
 
 **Subtasks**
 - Implement rest timer component.
