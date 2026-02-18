@@ -46,7 +46,8 @@ interface ElapsedTimeProps {
 
 interface ExerciseCardProps {
   exercise: ActiveSessionExercise;
-  onTap: () => void;
+  onTapAddSet: () => void;
+  onTapEditSet: (set: ActiveSessionSet) => void;
 }
 
 interface BottomBarProps {
@@ -106,21 +107,13 @@ function ElapsedTime({ startedAt }: ElapsedTimeProps) {
  * Exercise card showing:
  * - Exercise name
  * - Planned sets x rep range (if template-based)
- * - Sets logged summary
- * - Last time summary placeholder
+ * - Individual sets as tappable pills (Task 5.4)
+ * - Add set button
  */
-function ExerciseCard({ exercise, onTap }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onTapAddSet, onTapEditSet }: ExerciseCardProps) {
   // Calculate sets summary
   const setsCount = exercise.sets.length;
   const completedSets = exercise.sets.filter((s) => s.weight > 0 || s.reps > 0);
-  
-  // Get last set summary (weight x reps for each set)
-  const setsSummary = useMemo(() => {
-    if (completedSets.length === 0) return null;
-    return completedSets
-      .map((s) => `${s.weight}×${s.reps}`)
-      .join(' / ');
-  }, [completedSets]);
 
   // Get the best set (highest weight)
   const bestSet = useMemo(() => {
@@ -131,76 +124,92 @@ function ExerciseCard({ exercise, onTap }: ExerciseCardProps) {
   }, [completedSets]);
 
   return (
-    <button
-      onClick={onTap}
-      className="w-full text-left glass-card p-4 transition-all active:scale-[0.98] hover:brightness-105"
-    >
-      <div className="flex items-start justify-between gap-3">
-        {/* Exercise Info */}
-        <div className="flex-1 min-w-0">
-          {/* Exercise Name */}
-          <h3 className="font-semibold text-base truncate">
-            {exercise.exerciseName}
-          </h3>
+    <div className="glass-card p-4">
+      {/* Header row - tappable to add new set */}
+      <button
+        onClick={onTapAddSet}
+        className="w-full text-left transition-all active:scale-[0.99]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          {/* Exercise Info */}
+          <div className="flex-1 min-w-0">
+            {/* Exercise Name */}
+            <h3 className="font-semibold text-base truncate">
+              {exercise.exerciseName}
+            </h3>
 
-          {/* Sets Summary */}
-          <div className="flex items-center gap-3 mt-1.5">
-            {/* Sets count badge */}
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
-              {setsCount} set{setsCount !== 1 ? 's' : ''}
-            </span>
-
-            {/* Best set indicator */}
-            {bestSet && (
-              <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
-                <TrendingUp className="h-3 w-3" />
-                <span className="tabular-nums">
-                  {bestSet.weight} × {bestSet.reps}
-                </span>
+            {/* Sets Summary */}
+            <div className="flex items-center gap-3 mt-1.5">
+              {/* Sets count badge */}
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
+                {setsCount} set{setsCount !== 1 ? 's' : ''}
               </span>
-            )}
+
+              {/* Best set indicator */}
+              {bestSet && (
+                <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="tabular-nums">
+                    {bestSet.weight} × {bestSet.reps}
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Sets detail - show all completed sets */}
-          {setsSummary && (
-            <p className="text-sm text-[var(--color-text-muted)] mt-2 tabular-nums">
-              {setsSummary}
-            </p>
-          )}
-
-          {/* Empty state prompt */}
-          {setsCount === 0 && (
-            <p className="text-sm text-[var(--color-text-muted)] mt-2">
-              Tap to log your first set
-            </p>
-          )}
+          {/* Add Set Button */}
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--color-accent-purple)] to-[var(--color-accent-blue)] shadow-sm">
+            <Plus className="h-4 w-4 text-white" />
+          </div>
         </div>
+      </button>
 
-        {/* Chevron */}
-        <ChevronRight className="h-5 w-5 text-[var(--color-text-muted)] flex-shrink-0 mt-0.5" />
-      </div>
-
-      {/* Set flags badges */}
-      {completedSets.some((s) => s.flags?.warmup || s.flags?.failure || s.flags?.dropset) && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {completedSets.some((s) => s.flags?.warmup) && (
-            <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-info)]/20 text-[var(--color-info)]">
-              Warmup
-            </span>
-          )}
-          {completedSets.some((s) => s.flags?.failure) && (
-            <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)]">
-              Failure
-            </span>
-          )}
-          {completedSets.some((s) => s.flags?.dropset) && (
-            <span className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
-              Drop
-            </span>
-          )}
+      {/* Individual Sets - Tappable pills for editing (Task 5.4) */}
+      {completedSets.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-[var(--glass-border)]">
+          {exercise.sets.map((set, idx) => (
+            <button
+              key={set.localId}
+              onClick={() => onTapEditSet(set)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-base-600)] hover:bg-[var(--color-base-500)] active:scale-95 transition-all group"
+              aria-label={`Edit set ${idx + 1}: ${set.weight} lbs × ${set.reps} reps`}
+            >
+              {/* Set number badge */}
+              <span className="text-[10px] font-bold text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)]">
+                {idx + 1}
+              </span>
+              {/* Weight × Reps */}
+              <span className="text-sm font-medium tabular-nums text-[var(--color-text-primary)]">
+                {set.weight}×{set.reps}
+              </span>
+              {/* Flags */}
+              {set.flags?.warmup && (
+                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-info)]/20 text-[var(--color-info)]">
+                  W
+                </span>
+              )}
+              {set.flags?.failure && (
+                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-error)]/20 text-[var(--color-error)]">
+                  F
+                </span>
+              )}
+              {set.flags?.dropset && (
+                <span className="text-[8px] font-medium uppercase px-1 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
+                  D
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       )}
-    </button>
+
+      {/* Empty state prompt */}
+      {setsCount === 0 && (
+        <p className="text-sm text-[var(--color-text-muted)] mt-2">
+          Tap + to log your first set
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -311,7 +320,7 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, logSet } = useActiveSessionContext();
+  const { session, isLoading, endSession, logSet, updateSet } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
@@ -320,6 +329,8 @@ export default function WorkoutSessionPage() {
   // Set Logger sheet state
   const [selectedExercise, setSelectedExercise] = useState<ActiveSessionExercise | null>(null);
   const [showSetLoggerSheet, setShowSetLoggerSheet] = useState(false);
+  // Edit mode state (Task 5.4)
+  const [editingSet, setEditingSet] = useState<ActiveSessionSet | null>(null);
 
   // =============================================================================
   // HANDLERS
@@ -355,14 +366,24 @@ export default function WorkoutSessionPage() {
     }
   }, [endSession, router]);
 
-  const handleExerciseTap = useCallback((exercise: ActiveSessionExercise) => {
+  // Handler for adding a new set to an exercise
+  const handleAddSetTap = useCallback((exercise: ActiveSessionExercise) => {
     setSelectedExercise(exercise);
+    setEditingSet(null); // Clear any editing state - we're adding a new set
+    setShowSetLoggerSheet(true);
+  }, []);
+
+  // Handler for editing an existing set (Task 5.4)
+  const handleEditSetTap = useCallback((exercise: ActiveSessionExercise, set: ActiveSessionSet) => {
+    setSelectedExercise(exercise);
+    setEditingSet(set);
     setShowSetLoggerSheet(true);
   }, []);
 
   const handleCloseSetLoggerSheet = useCallback(() => {
     setShowSetLoggerSheet(false);
     setSelectedExercise(null);
+    setEditingSet(null);
   }, []);
 
   const handleLogSet = useCallback(
@@ -373,6 +394,18 @@ export default function WorkoutSessionPage() {
       await logSet(exerciseLocalId, set);
     },
     [logSet]
+  );
+
+  // Handler for updating an existing set (Task 5.4)
+  const handleUpdateSet = useCallback(
+    async (
+      exerciseLocalId: string,
+      setLocalId: string,
+      updates: Partial<Omit<ActiveSessionSet, 'localId'>>
+    ) => {
+      await updateSet(exerciseLocalId, setLocalId, updates);
+    },
+    [updateSet]
   );
 
   // =============================================================================
@@ -452,7 +485,8 @@ export default function WorkoutSessionPage() {
                 <ExerciseCard
                   key={exercise.localId}
                   exercise={exercise}
-                  onTap={() => handleExerciseTap(exercise)}
+                  onTapAddSet={() => handleAddSetTap(exercise)}
+                  onTapEditSet={(set) => handleEditSetTap(exercise, set)}
                 />
               ))}
           </div>
@@ -480,13 +514,15 @@ export default function WorkoutSessionPage() {
         isLoading={isEndingWorkout}
       />
 
-      {/* Set Logger Sheet (Task 5.3) */}
+      {/* Set Logger Sheet (Task 5.3 + 5.4) */}
       {selectedExercise && (
         <SetLoggerSheet
           isOpen={showSetLoggerSheet}
           onClose={handleCloseSetLoggerSheet}
           exercise={selectedExercise}
           onLogSet={handleLogSet}
+          onUpdateSet={handleUpdateSet}
+          editingSet={editingSet ?? undefined}
         />
       )}
     </div>

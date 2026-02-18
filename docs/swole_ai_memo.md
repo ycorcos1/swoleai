@@ -986,3 +986,50 @@
 - Verified: `tsc --noEmit` passes with no errors
 - Verified: `npm run lint` passes with no errors
 - Verified: `npm run build` succeeds — all files compile correctly
+
+### Task 5.4 — Edit set ✅
+- Updated `src/components/workout/SetLoggerSheet.tsx` — added edit mode support:
+  - **New Props**:
+    - `onUpdateSet` (optional callback) — updates an existing set in IndexedDB + enqueues sync mutation
+    - `editingSet` (optional ActiveSessionSet) — if provided, sheet opens in edit mode
+  - **Edit Mode Behavior**:
+    - `isEditMode` flag derived from `!!editingSet`
+    - Pre-fills weight/reps from `editingSet` values instead of last logged set
+    - Header shows purple "Edit" badge with `Edit3` icon
+    - Shows "Set N" for the specific set being edited (1-indexed)
+    - Previous sets summary excludes the set being edited
+  - **Update Flow**:
+    - `handleUpdateSet()` calls `onUpdateSet(exerciseLocalId, setLocalId, { weight, reps })`
+    - `handleSubmit()` routes to `handleUpdateSet()` in edit mode, `handleLogSet()` in new set mode
+    - Loading state shows "Updating..." in edit mode
+  - **Button Styling**:
+    - Edit mode: "Update Set" with `Edit3` icon
+    - New set mode: "Log Set" with `Check` icon (unchanged)
+- Updated `src/app/app/workout/session/[id]/page.tsx` — added edit set interaction:
+  - **State Changes**:
+    - Added `editingSet` state (`ActiveSessionSet | null`)
+    - Added `updateSet` from `useActiveSessionContext()`
+  - **Handlers**:
+    - `handleAddSetTap(exercise)` — opens sheet for new set (clears `editingSet`)
+    - `handleEditSetTap(exercise, set)` — opens sheet in edit mode (sets both `selectedExercise` and `editingSet`)
+    - `handleUpdateSet()` — wraps `updateSet()` from context
+    - `handleCloseSetLoggerSheet()` — clears both `selectedExercise` and `editingSet`
+  - **ExerciseCard Redesign**:
+    - Props changed from `onTap` to `onTapAddSet` and `onTapEditSet`
+    - Header row: exercise name + sets badge + best set + **Add button (+ icon)** — tappable to add new set
+    - Individual sets row: **tappable pills** for each logged set showing `setIndex | weight×reps`
+    - Each pill has set number badge, weight×reps, and flag indicators (W/F/D)
+    - Pills styled with hover/active states for clear interactivity
+    - Empty state shows "Tap + to log your first set"
+  - **SetLoggerSheet Integration**:
+    - Passes `onUpdateSet={handleUpdateSet}` and `editingSet={editingSet ?? undefined}`
+- **Data Flow** (Edit):
+  - User taps set pill → `handleEditSetTap(exercise, set)` → sets `selectedExercise` + `editingSet` → opens SetLoggerSheet in edit mode
+  - User adjusts values → taps "Update Set" → `handleUpdateSet()` → `updateSet()` → `updateSetInExercise()` (IndexedDB) + `enqueueMutation('UPDATE_SET')` (sync queue)
+  - UI updates reactively via Dexie `useLiveQuery`
+- **Acceptance criteria verified**:
+  - Edited set is persisted ✓ (IndexedDB via `updateSetInExercise()`)
+  - Reflected after reload ✓ (Dexie live query restores session state on mount)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors
+- Verified: `npm run build` succeeds — all files compile correctly
