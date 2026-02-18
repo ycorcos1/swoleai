@@ -10,13 +10,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Minimal User model to verify Prisma + Neon connection
-// Full schema will be added in subsequent tasks (2.2+)
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum GoalMode {
+  HYPERTROPHY
+  STRENGTH
+  HYBRID
+}
+
+enum UnitSystem {
+  METRIC
+  IMPERIAL
+}
+
+enum EquipmentAccess {
+  COMMERCIAL
+  HOME
+}
+
+// =============================================================================
+// CORE MODELS
+// =============================================================================
+
+// User model with profile fields (Task 2.2)
+// Profile fields: goal, days/week, session minutes, units, equipment, constraints JSON
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
+  password  String?  // Hashed password for credentials auth
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Profile fields (PRD 8.2 Onboarding Wizard)
+  goalMode       GoalMode?        @map("goal_mode")
+  daysPerWeek    Int?             @map("days_per_week")
+  sessionMinutes Int?             @map("session_minutes")
+  units          UnitSystem?      @default(IMPERIAL)
+  equipment      EquipmentAccess? @default(COMMERCIAL)
+
+  // Constraints JSON field (PRD 8.2 step 4: injuries/avoid list, must-have lifts)
+  // Structure: { injuries: string[], avoidExercises: string[], mustHaveExercises: string[] }
+  constraints Json? @default("{}")
+
+  // Onboarding completion flag
+  onboardingComplete Boolean @default(false) @map("onboarding_complete")
 
   @@map("users")
 }
