@@ -35,7 +35,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
-import { SetLoggerSheet, AddExerciseSheet } from '@/components/workout';
+import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList } from '@/components/workout';
 
 // =============================================================================
 // TYPES
@@ -49,6 +49,8 @@ interface ExerciseCardProps {
   exercise: ActiveSessionExercise;
   onTapAddSet: () => void;
   onTapEditSet: (set: ActiveSessionSet) => void;
+  /** Drag handle node injected by SortableExerciseList (Task 5.9) */
+  dragHandle?: React.ReactNode;
 }
 
 interface BottomBarProps {
@@ -111,7 +113,7 @@ function ElapsedTime({ startedAt }: ElapsedTimeProps) {
  * - Individual sets as tappable pills (Task 5.4)
  * - Add set button
  */
-function ExerciseCard({ exercise, onTapAddSet, onTapEditSet }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle }: ExerciseCardProps) {
   // Calculate sets summary
   const setsCount = exercise.sets.length;
   const completedSets = exercise.sets.filter((s) => s.weight > 0 || s.reps > 0);
@@ -126,44 +128,54 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet }: ExerciseCardProps
 
   return (
     <div className="glass-card p-4">
-      {/* Header row - tappable to add new set */}
-      <button
-        onClick={onTapAddSet}
-        className="w-full text-left transition-all active:scale-[0.99]"
-      >
-        <div className="flex items-start justify-between gap-3">
-          {/* Exercise Info */}
-          <div className="flex-1 min-w-0">
-            {/* Exercise Name */}
-            <h3 className="font-semibold text-base truncate">
-              {exercise.exerciseName}
-            </h3>
+      {/* Header row */}
+      <div className="flex items-start gap-2">
+        {/* Drag handle (Task 5.9) — rendered left of card content */}
+        {dragHandle && (
+          <div className="flex items-center pt-0.5 shrink-0">
+            {dragHandle}
+          </div>
+        )}
 
-            {/* Sets Summary */}
-            <div className="flex items-center gap-3 mt-1.5">
-              {/* Sets count badge */}
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
-                {setsCount} set{setsCount !== 1 ? 's' : ''}
-              </span>
+        {/* Tappable area — opens set logger */}
+        <button
+          onClick={onTapAddSet}
+          className="flex-1 min-w-0 text-left transition-all active:scale-[0.99]"
+        >
+          <div className="flex items-start justify-between gap-3">
+            {/* Exercise Info */}
+            <div className="flex-1 min-w-0">
+              {/* Exercise Name */}
+              <h3 className="font-semibold text-base truncate">
+                {exercise.exerciseName}
+              </h3>
 
-              {/* Best set indicator */}
-              {bestSet && (
-                <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="tabular-nums">
-                    {bestSet.weight} × {bestSet.reps}
-                  </span>
+              {/* Sets Summary */}
+              <div className="flex items-center gap-3 mt-1.5">
+                {/* Sets count badge */}
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
+                  {setsCount} set{setsCount !== 1 ? 's' : ''}
                 </span>
-              )}
+
+                {/* Best set indicator */}
+                {bestSet && (
+                  <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
+                    <TrendingUp className="h-3 w-3" />
+                    <span className="tabular-nums">
+                      {bestSet.weight} × {bestSet.reps}
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Add Set Button */}
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--color-accent-purple)] to-[var(--color-accent-blue)] shadow-sm shrink-0">
+              <Plus className="h-4 w-4 text-white" />
             </div>
           </div>
-
-          {/* Add Set Button */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--color-accent-purple)] to-[var(--color-accent-blue)] shadow-sm">
-            <Plus className="h-4 w-4 text-white" />
-          </div>
-        </div>
-      </button>
+        </button>
+      </div>
 
       {/* Individual Sets - Tappable pills for editing (Task 5.4) */}
       {completedSets.length > 0 && (
@@ -326,7 +338,7 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, addExercise, logSet, updateSet, canUndo, undoLastAction } = useActiveSessionContext();
+  const { session, isLoading, endSession, addExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
@@ -521,18 +533,19 @@ export default function WorkoutSessionPage() {
         {session.exercises.length === 0 ? (
           <EmptyExerciseState onAddExercise={handleAddExercise} />
         ) : (
-          <div className="space-y-3">
-            {session.exercises
-              .sort((a, b) => a.orderIndex - b.orderIndex)
-              .map((exercise) => (
-                <ExerciseCard
-                  key={exercise.localId}
-                  exercise={exercise}
-                  onTapAddSet={() => handleAddSetTap(exercise)}
-                  onTapEditSet={(set) => handleEditSetTap(exercise, set)}
-                />
-              ))}
-          </div>
+          /* Task 5.9 — Drag/drop reorder */
+          <SortableExerciseList
+            exercises={[...session.exercises].sort((a, b) => a.orderIndex - b.orderIndex)}
+            onReorder={reorderExercises}
+            renderCard={(exercise, dragHandle) => (
+              <ExerciseCard
+                exercise={exercise}
+                onTapAddSet={() => handleAddSetTap(exercise)}
+                onTapEditSet={(set) => handleEditSetTap(exercise, set)}
+                dragHandle={dragHandle}
+              />
+            )}
+          />
         )}
       </main>
 

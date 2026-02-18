@@ -316,6 +316,45 @@ export async function removeSetFromExercise(
 }
 
 // =============================================================================
+// EXERCISE REORDER (Task 5.9)
+// =============================================================================
+
+/**
+ * Reorder exercises in the active session by providing a new ordered list of localIds.
+ *
+ * Updates the `orderIndex` of each exercise to match the supplied order and
+ * persists the change to IndexedDB.
+ *
+ * @param orderedLocalIds - Array of exercise localIds in the desired display order
+ * @returns Promise resolving when the reorder is persisted
+ * @throws Error if no active session exists
+ */
+export async function reorderExercisesInSession(orderedLocalIds: string[]): Promise<void> {
+  const current = await getActiveSession();
+
+  if (!current) {
+    throw new Error('No active session to reorder exercises in');
+  }
+
+  // Build a map for O(1) lookup
+  const exerciseMap = new Map(current.exercises.map((e) => [e.localId, e]));
+
+  // Rebuild the exercises array in the new order, assigning fresh orderIndex values
+  const reordered = orderedLocalIds.map((id, idx) => {
+    const exercise = exerciseMap.get(id);
+    if (!exercise) {
+      throw new Error(`Exercise with localId ${id} not found`);
+    }
+    return { ...exercise, orderIndex: idx };
+  });
+
+  await db.activeSession.update('current', {
+    exercises: reordered,
+    updatedAt: new Date(),
+  });
+}
+
+// =============================================================================
 // UNDO STACK MANAGEMENT (Task 5.5)
 // =============================================================================
 

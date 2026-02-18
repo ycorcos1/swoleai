@@ -22,6 +22,7 @@ import {
   addExerciseToSession,
   removeExerciseFromSession,
   updateExerciseInSession,
+  reorderExercisesInSession,
   addSetToExercise,
   updateSetInExercise,
   removeSetFromExercise,
@@ -75,6 +76,11 @@ export interface UseActiveSessionReturn {
     title?: string;
     constraintFlags?: ActiveSession['constraintFlags'];
   }) => Promise<void>;
+  // =============================================================================
+  // REORDER SUPPORT (Task 5.9)
+  // =============================================================================
+  /** Reorder exercises by providing new array of localIds in desired order */
+  reorderExercises: (orderedLocalIds: string[]) => Promise<void>;
   // =============================================================================
   // UNDO SUPPORT (Task 5.5)
   // =============================================================================
@@ -289,6 +295,26 @@ export function useActiveSession(): UseActiveSessionReturn {
         await updateExerciseInSession(localId, updates);
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to update exercise');
+        if (mountedRef.current) {
+          setError(error);
+        }
+        throw error;
+      }
+    },
+    []
+  );
+
+  // =============================================================================
+  // EXERCISE REORDER (Task 5.9)
+  // =============================================================================
+
+  const reorderExercises = useCallback(
+    async (orderedLocalIds: string[]): Promise<void> => {
+      try {
+        setError(null);
+        await reorderExercisesInSession(orderedLocalIds);
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error('Failed to reorder exercises');
         if (mountedRef.current) {
           setError(error);
         }
@@ -539,6 +565,8 @@ export function useActiveSession(): UseActiveSessionReturn {
     addExercise,
     removeExercise,
     updateExercise,
+    // Reorder support (Task 5.9)
+    reorderExercises,
     logSet,
     updateSet,
     removeSet,

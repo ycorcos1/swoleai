@@ -1175,6 +1175,43 @@
 
 ---
 
+### Task 5.9 — Reorder exercises ✅
+- **Prerequisite satisfied**: Task 5.2 (workout session page + exercise cards) in place
+- **Installed packages**: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` — the standard React drag-and-drop solution; chosen because it handles both mouse/stylus (PointerSensor) and touch (TouchSensor) natively, making it correct for mobile-first use
+- **`src/lib/offline/session.ts`**:
+  - Added `reorderExercisesInSession(orderedLocalIds: string[])` — builds a `Map` from the current exercises, then reconstructs the array in the new order assigning fresh `orderIndex` values (`0, 1, 2…`), and persists to IndexedDB via `db.activeSession.update`
+- **`src/lib/offline/useActiveSession.ts`**:
+  - Imported `reorderExercisesInSession`
+  - Added `reorderExercises` to the `UseActiveSessionReturn` interface (under "Reorder Support")
+  - Implemented `reorderExercises` as a `useCallback` that calls `reorderExercisesInSession` and surfaces errors via the shared `error` state
+  - Added `reorderExercises` to the hook's return object
+- **`src/lib/offline/index.ts`**:
+  - Exported `reorderExercisesInSession`
+- **`src/components/workout/SortableExerciseList.tsx`** *(new file)*:
+  - `SortableExerciseList` — top-level component wrapping exercises in `<DndContext>` + `<SortableContext>` (vertical list strategy)
+  - `SortableItem` — per-card wrapper using `useSortable`; applies CSS `transform`/`transition` during drag, sets `opacity: 0.5` on the item being dragged
+  - Drag handle: `GripVertical` icon button with `touch-none select-none` to prevent text/scroll interference; `onClick` is stopped to avoid triggering the card's set-logger tap
+  - `renderCard` render-prop pattern: parent controls card markup and decides where to place the injected `dragHandle` node — keeps `SortableExerciseList` generic and `ExerciseCard` in control of its own layout
+  - Activation constraints: `PointerSensor` requires 8 px movement; `TouchSensor` requires 200 ms delay + 8 px tolerance — prevents mis-fires on normal taps
+  - Optimistic UI: `localOrder` state is updated immediately on `dragEnd`; persists via `onReorder`; rolls back on error
+  - Syncs `localOrder` when exercises are added/removed (by checking whether all current IDs are present in local order)
+- **`src/components/workout/index.ts`**:
+  - Exported `SortableExerciseList` and `SortableExerciseListProps`
+- **`src/app/app/workout/session/[id]/page.tsx`**:
+  - `ExerciseCardProps` extended with optional `dragHandle?: React.ReactNode`
+  - `ExerciseCard` header restructured: drag handle is rendered left of the tappable button area; the `+` button now has `shrink-0` to stay fixed-size alongside the handle
+  - Destructured `reorderExercises` from `useActiveSessionContext()`
+  - Replaced `session.exercises.sort().map(<ExerciseCard>)` with `<SortableExerciseList>` passing pre-sorted exercises, `reorderExercises` as `onReorder`, and a `renderCard` callback that passes the injected `dragHandle` into `ExerciseCard`
+- **Data flow** (Reorder):
+  - User long-presses / drags the `GripVertical` handle → `DndContext` tracks pointer/touch → on `dragEnd`, `arrayMove` computes new order → `localOrder` updated (optimistic) → `reorderExercises(newOrder)` called → `reorderExercisesInSession()` writes new `orderIndex` values to IndexedDB → Dexie `useLiveQuery` triggers re-render → exercises displayed in persisted order (survives page reload)
+- **Acceptance criteria verified**:
+  - Drag/drop reorder is functional on both mouse and touch ✓
+  - Order persists in active session ✓ (IndexedDB write, survives reload via `useLiveQuery`)
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors on all changed files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.

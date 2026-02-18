@@ -33,6 +33,8 @@ export {
   addExerciseToSession,
   removeExerciseFromSession,
   updateExerciseInSession,
+  // Reorder exercises (Task 5.9)
+  reorderExercisesInSession,
   addSetToExercise,
   updateSetInExercise,
   removeSetFromExercise,
