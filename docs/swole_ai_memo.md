@@ -1244,6 +1244,27 @@
 
 ---
 
+### Task 6.1 — Routine Studio tabs skeleton ✅
+- **Prerequisite satisfied**: Task 0.3 (base app shell + routing) in place
+- **`src/app/app/routine/page.tsx`** *(replaced placeholder)*:
+  - Converted from a static coming-soon page to a `'use client'` tabbed layout
+  - `TABS` constant defines all four tabs with IDs, labels, and Lucide icons: `splits` (`LayoutGrid`), `days` (`CalendarDays`), `favorites` (`Star`), `versions` (`GitBranch`)
+  - Tab bar rendered as a `role="tablist"` `<nav>` with one `role="tab"` `<button>` per tab; active tab receives a full-width gradient underline indicator bar (`var(--color-accent-gradient)`)
+  - Active tab state managed via `useState<Tab>('splits')` — defaults to Splits on load
+  - Each tab panel uses `role="tabpanel"` with `aria-labelledby` / `id` / `hidden` for accessible tab switching
+  - Empty-state components for each tab: icon + heading + descriptive text + CTA button (where applicable)
+    - **SplitsTab**: "No splits yet" + "Create Split" (`btn-primary`)
+    - **DaysTab**: "No saved workout days" + "Create Day" (`btn-primary`)
+    - **FavoritesTab**: "No favorites yet" + "Browse Exercises" (`btn-secondary`)
+    - **VersionsTab**: "No program versions" (no CTA — versions are created by accepting routine changes)
+  - All touch targets ≥ 44px (`min-h-[44px] touch-target` on tab buttons)
+- **Acceptance criteria verified**:
+  - Tabs render: Splits, Days, Favorites, Versions ✓
+- Verified: `tsc --noEmit` passes with no errors
+- Verified: `read_lints` returns no errors on all changed files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
