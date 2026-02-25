@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { LayoutGrid, CalendarDays, Star, GitBranch } from 'lucide-react';
 import { SplitsTab } from '@/components/splits/SplitsTab';
 import { DaysTab } from '@/components/days/DaysTab';
+import { FavoritesTab } from '@/components/favorites/FavoritesTab';
 
 type Tab = 'splits' | 'days' | 'favorites' | 'versions';
 
@@ -28,20 +29,6 @@ const TABS: TabConfig[] = [
 ];
 
 
-function FavoritesTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-base-600)] mb-4">
-        <Star className="h-8 w-8 text-[var(--color-accent-purple)]" />
-      </div>
-      <h2 className="text-lg font-semibold mb-1">No favorites yet</h2>
-      <p className="text-sm text-[var(--color-text-muted)] max-w-xs mb-6">
-        Mark exercises as favorites (Primary or Backup) to speed up day creation and get better AI suggestions.
-      </p>
-      <button className="btn-secondary px-6">Browse Exercises</button>
-    </div>
-  );
-}
 
 function VersionsTab() {
   return (

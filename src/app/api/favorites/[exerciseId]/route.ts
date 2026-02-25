@@ -16,6 +16,11 @@ const toggleFavoriteSchema = z.object({
   tags: z.array(z.string()).optional().default([]),
 }).optional();
 
+// Schema for PATCH body — update priority of an existing favorite
+const updatePrioritySchema = z.object({
+  priority: z.nativeEnum(FavoritePriority),
+});
+
 // Schema for exerciseId param validation
 const exerciseIdSchema = z.string().min(1, 'Exercise ID is required');
 
@@ -136,4 +141,83 @@ export async function POST(
       message: 'Exercise added to favorites',
     });
   }
+}
+
+// =============================================================================
+// PATCH /api/favorites/:exerciseId — Update priority of an existing favorite
+// =============================================================================
+// Changes the priority of an already-favorited exercise (PRIMARY ↔ BACKUP).
+// Returns the updated favorite record.
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ exerciseId: string }> }
+) {
+  const auth = await requireAuth();
+  if (!auth.success) {
+    return auth.response;
+  }
+  const { userId } = auth;
+
+  // Validate exerciseId param
+  const { exerciseId } = await params;
+  const exerciseIdResult = exerciseIdSchema.safeParse(exerciseId);
+  if (!exerciseIdResult.success) {
+    return NextResponse.json(
+      { error: 'Invalid exercise ID', details: exerciseIdResult.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  // Parse and validate body
+  let body: z.infer<typeof updatePrioritySchema>;
+  try {
+    const rawBody = await request.text();
+    const parsed = JSON.parse(rawBody);
+    const bodyResult = updatePrioritySchema.safeParse(parsed);
+    if (!bodyResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid body', details: bodyResult.error.flatten() },
+        { status: 400 }
+      );
+    }
+    body = bodyResult.data;
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON body' },
+      { status: 400 }
+    );
+  }
+
+  // Verify the favorite exists for this user
+  const existing = await prisma.favorite.findUnique({
+    where: {
+      userId_exerciseId: { userId, exerciseId },
+    },
+  });
+
+  if (!existing) {
+    return NextResponse.json(
+      { error: 'Favorite not found' },
+      { status: 404 }
+    );
+  }
+
+  // Update the priority
+  const updated = await prisma.favorite.update({
+    where: { id: existing.id },
+    data: { priority: body.priority },
+    select: {
+      id: true,
+      priority: true,
+      tags: true,
+      createdAt: true,
+    },
+  });
+
+  return NextResponse.json({
+    favorite: updated,
+    exerciseId,
+    message: `Priority updated to ${body.priority}`,
+  });
 }
