@@ -71,6 +71,25 @@ export interface TemplateBlockFull {
   notes: string | null;
 }
 
+export interface TemplateSlotFull {
+  id: string;
+  orderIndex: number;
+  muscleGroup: string;
+  exerciseCount: number;
+  patternConstraints: {
+    allowedPatterns?: string[];
+    excludedPatterns?: string[];
+  } | null;
+  equipmentConstraints: {
+    allowedTypes?: string[];
+    excludedTypes?: string[];
+  } | null;
+  defaultSets: number;
+  defaultRepMin: number;
+  defaultRepMax: number;
+  notes: string | null;
+}
+
 export interface TemplateForEditor {
   id: string;
   name: string;
@@ -81,7 +100,7 @@ export interface TemplateForEditor {
   createdAt: string;
   updatedAt: string;
   blocks: TemplateBlockFull[];
-  slots: Array<{ id: string; orderIndex: number; muscleGroup: string }>;
+  slots: TemplateSlotFull[];
 }
 
 interface LocalBlock {

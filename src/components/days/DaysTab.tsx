@@ -29,7 +29,9 @@ import {
   FixedTemplateEditor,
   type TemplateForEditor,
   type TemplateBlockFull,
+  type TemplateSlotFull,
 } from './FixedTemplateEditor';
+import { SlotTemplateEditor } from './SlotTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,11 +40,8 @@ type TemplateMode = 'FIXED' | 'SLOT';
 // TemplateBlock now carries the full data returned by the API (used by editor)
 interface TemplateBlock extends TemplateBlockFull {}
 
-interface TemplateSlot {
-  id: string;
-  orderIndex: number;
-  muscleGroup: string;
-}
+// TemplateSlot carries the full slot data returned by the API (used by editor)
+interface TemplateSlot extends TemplateSlotFull {}
 
 interface Template extends TemplateForEditor {
   slots: TemplateSlot[];
@@ -439,17 +438,21 @@ function TemplateCard({ template, onEdit }: TemplateCardProps) {
           )}
         </div>
 
-        {/* Edit button — only for FIXED templates (Task 6.6) */}
-        {isFixed && (
-          <button
-            type="button"
-            onClick={() => onEdit(template)}
-            aria-label={`Edit ${template.name}`}
-            className="flex-shrink-0 p-2 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)] transition-colors"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-        )}
+        {/* Edit button — FIXED (Task 6.6) and SLOT (Task 6.7) templates */}
+        <button
+          type="button"
+          onClick={() => onEdit(template)}
+          aria-label={`Edit ${template.name}`}
+          className={[
+            'flex-shrink-0 p-2 rounded-[var(--radius-sm)] transition-colors',
+            'text-[var(--color-text-muted)]',
+            isFixed
+              ? 'hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)]'
+              : 'hover:text-[var(--color-accent-blue)] hover:bg-[rgba(59,130,246,0.10)]',
+          ].join(' ')}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
       </div>
     </GlassCard>
   );
@@ -461,7 +464,10 @@ function TemplateCard({ template, onEdit }: TemplateCardProps) {
 type WizardState = null | { step: 'choose' } | { step: 'details'; mode: TemplateMode };
 
 /** View mode for this tab */
-type ViewState = { view: 'list' } | { view: 'edit'; template: Template };
+type ViewState =
+  | { view: 'list' }
+  | { view: 'editFixed'; template: Template }
+  | { view: 'editSlot'; template: Template };
 
 export function DaysTab() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -504,13 +510,17 @@ export function DaysTab() {
     setWizard(null);
   }
 
-  /** Called when the user clicks "Edit" on a FIXED template card */
+  /** Called when the user clicks "Edit" on any template card */
   function handleEditTemplate(template: Template) {
     setWizard(null); // close wizard if open
-    setViewState({ view: 'edit', template });
+    if (template.mode === 'SLOT') {
+      setViewState({ view: 'editSlot', template });
+    } else {
+      setViewState({ view: 'editFixed', template });
+    }
   }
 
-  /** Called by FixedTemplateEditor on successful save */
+  /** Called by either editor on successful save */
   function handleEditorDone(updated: TemplateForEditor) {
     setTemplates((prev) =>
       prev.map((t) => (t.id === updated.id ? (updated as Template) : t))
@@ -518,16 +528,28 @@ export function DaysTab() {
     setViewState({ view: 'list' });
   }
 
-  /** Called when the user clicks ← in the editor */
+  /** Called when the user clicks ← in either editor */
   function handleEditorBack() {
     setViewState({ view: 'list' });
   }
 
-  // ── Editor view ────────────────────────────────────────────────────────────
+  // ── Fixed template editor view ─────────────────────────────────────────────
 
-  if (viewState.view === 'edit') {
+  if (viewState.view === 'editFixed') {
     return (
       <FixedTemplateEditor
+        template={viewState.template}
+        onDone={handleEditorDone}
+        onBack={handleEditorBack}
+      />
+    );
+  }
+
+  // ── Slot template editor view ──────────────────────────────────────────────
+
+  if (viewState.view === 'editSlot') {
+    return (
+      <SlotTemplateEditor
         template={viewState.template}
         onDone={handleEditorDone}
         onBack={handleEditorBack}

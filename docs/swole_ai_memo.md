@@ -1317,6 +1317,47 @@
 
 ---
 
+### Task 6.7 — Days UI: slot template editor ✅
+- **Prerequisite satisfied**: Task 6.5 (DaysTab with template list + create wizard) already in place
+- **New file — `src/components/days/SlotTemplateEditor.tsx`**:
+  - Exports `SlotTemplateEditor` component (parallel to `FixedTemplateEditor` for SLOT-mode templates)
+  - **`LocalSlot`** internal type mirrors the full `WorkoutDaySlot` schema: `muscleGroup`, `exerciseCount`, `allowedPatterns`, `excludedPatterns`, `allowedTypes`, `excludedTypes`, `defaultSets`, `defaultRepMin`, `defaultRepMax`, `notes`; uses `_key` (db id for existing, `new-{Date.now()}-{random}` for added) as stable React key
+  - **`AddSlotPanel`**: inline panel rendered in place of the Add button:
+    - 15 preset muscle-group chips (chest, back, shoulders, biceps, triceps, quads, hamstrings, glutes, calves, abs, core, lats, traps, forearms, adductors) for one-tap selection
+    - Custom text input + "Add" submit for non-preset groups
+    - Cancel (×) button dismisses without adding
+  - **`SlotRow`**: renders one slot with:
+    - ▲ / ▼ reorder buttons (disabled at list boundaries with `opacity-25`)
+    - Clickable summary row (muscle group name + "constrained" badge if any pattern/equipment constraint is set + `{n} ex · {sets} × {repMin}–{repMax}` metadata line) toggling the inline config panel
+    - ⚙️ config toggle button (highlights purple when expanded)
+    - 🗑 remove button (hover turns red)
+    - **Expanded config panel**:
+      - Muscle group text input (editable after creation)
+      - 4-column grid: `# Exs` (exerciseCount), `Sets`, `Rep min`, `Rep max`
+      - **`ConstraintPills`** pill-toggle multi-select component (shared inline) for:
+        - Allowed movement patterns (11 options from `MovementPattern` enum)
+        - Excluded movement patterns
+        - Allowed equipment types (6 options from `ExerciseType` enum)
+        - Excluded equipment types
+      - Notes text input (optional)
+  - **`SlotTemplateEditor`**: initialises `LocalSlot[]` state sorted by `orderIndex`; `handleMoveSlot`, `handleRemoveSlot`, `handleSlotChange`, `handleAddSlot` mutations; `handleSave` serialises local state into the `slots[]` payload (sequential `orderIndex`, `patternConstraints`/`equipmentConstraints` collapsed to `null` when no selections) and calls `PUT /api/templates/:id`; on success shows "Saved!" for 700 ms then calls `onDone(updatedTemplate)`; `savedOk` resets whenever slots change
+  - Empty state: `Shuffle` icon + "No slots yet" text + "Add Slot" `btn-primary` (mirrors `FixedTemplateEditor` empty state pattern)
+- **Updated — `src/components/days/FixedTemplateEditor.tsx`**:
+  - Exported new **`TemplateSlotFull`** interface with all slot API fields: `id`, `orderIndex`, `muscleGroup`, `exerciseCount`, `patternConstraints`, `equipmentConstraints`, `defaultSets`, `defaultRepMin`, `defaultRepMax`, `notes`
+  - Updated `TemplateForEditor.slots` from a minimal `Array<{ id; orderIndex; muscleGroup }>` to `TemplateSlotFull[]`
+- **Updated — `src/components/days/DaysTab.tsx`**:
+  - Imported `SlotTemplateEditor` and `TemplateSlotFull`
+  - `TemplateSlot` now `extends TemplateSlotFull` (carries full slot data, consistent with `TemplateBlock extends TemplateBlockFull`)
+  - `ViewState` discriminated union extended from `{ view: 'list' } | { view: 'edit'; … }` to `{ view: 'list' } | { view: 'editFixed'; … } | { view: 'editSlot'; … }`
+  - `handleEditTemplate` branches on `template.mode`: SLOT → `editSlot` view, FIXED → `editFixed` view
+  - `TemplateCard` Edit (pencil) button now rendered for **both** FIXED and SLOT templates (FIXED: purple hover, SLOT: blue hover — matches each mode's accent colour)
+  - Two conditional renders at the top of `DaysTab`: `editFixed` → `<FixedTemplateEditor>`, `editSlot` → `<SlotTemplateEditor>`; both share the same `handleEditorDone` / `handleEditorBack` callbacks
+- **Acceptance criteria verified**:
+  - Slot template edits persist: `SlotTemplateEditor.handleSave()` calls `PUT /api/templates/:id` with `{ slots: [...] }`; the existing API transactionally deletes + recreates all slots and returns the updated template; `handleEditorDone` splices the fresh response into the live list — no reload needed ✓
+- Verified: `read_lints` returns no errors on all three changed files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
