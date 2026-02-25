@@ -1,10 +1,12 @@
 /**
  * DaysTab — Task 6.5: Days UI: list + create template
+ *           Task 6.6: Days UI: fixed template editor
  *
  * - Fetches user's day templates from GET /api/templates
  * - Renders each template as a glass card (name, mode badge, estimated time, block/slot count)
  * - "Create Day" wizard: Step 1 choose Fixed vs Slot, Step 2 name + metadata → POST /api/templates
- * - After creation: template prepended to list (Acceptance Criteria: template saved and listed)
+ * - FIXED templates show an "Edit" button that opens the FixedTemplateEditor view
+ * - After creation or edit: template list is updated in-place (Acceptance Criteria: persists)
  */
 
 'use client';
@@ -20,18 +22,21 @@ import {
   Shuffle,
   Clock,
   Dumbbell,
+  Pencil,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
+import {
+  FixedTemplateEditor,
+  type TemplateForEditor,
+  type TemplateBlockFull,
+} from './FixedTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type TemplateMode = 'FIXED' | 'SLOT';
 
-interface TemplateBlock {
-  id: string;
-  orderIndex: number;
-  exerciseId: string;
-}
+// TemplateBlock now carries the full data returned by the API (used by editor)
+interface TemplateBlock extends TemplateBlockFull {}
 
 interface TemplateSlot {
   id: string;
@@ -39,16 +44,7 @@ interface TemplateSlot {
   muscleGroup: string;
 }
 
-interface Template {
-  id: string;
-  name: string;
-  mode: TemplateMode;
-  defaultProgressionEngine: string;
-  notes: string | null;
-  estimatedMinutes: number | null;
-  createdAt: string;
-  updatedAt: string;
-  blocks: TemplateBlock[];
+interface Template extends TemplateForEditor {
   slots: TemplateSlot[];
 }
 
@@ -383,9 +379,10 @@ function TemplateDetailsStep({ mode, onBack, onSuccess, onCancel }: TemplateDeta
 
 interface TemplateCardProps {
   template: Template;
+  onEdit: (template: Template) => void;
 }
 
-function TemplateCard({ template }: TemplateCardProps) {
+function TemplateCard({ template, onEdit }: TemplateCardProps) {
   const isFixed = template.mode === 'FIXED';
   const itemCount = isFixed ? template.blocks.length : template.slots.length;
   const itemLabel = isFixed
@@ -441,6 +438,18 @@ function TemplateCard({ template }: TemplateCardProps) {
             </p>
           )}
         </div>
+
+        {/* Edit button — only for FIXED templates (Task 6.6) */}
+        {isFixed && (
+          <button
+            type="button"
+            onClick={() => onEdit(template)}
+            aria-label={`Edit ${template.name}`}
+            className="flex-shrink-0 p-2 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)] transition-colors"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </GlassCard>
   );
@@ -451,11 +460,15 @@ function TemplateCard({ template }: TemplateCardProps) {
 /** Wizard states: null = wizard closed, 'choose' = step 1, 'details' = step 2 */
 type WizardState = null | { step: 'choose' } | { step: 'details'; mode: TemplateMode };
 
+/** View mode for this tab */
+type ViewState = { view: 'list' } | { view: 'edit'; template: Template };
+
 export function DaysTab() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [wizard, setWizard] = useState<WizardState>(null);
+  const [viewState, setViewState] = useState<ViewState>({ view: 'list' });
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -489,6 +502,37 @@ export function DaysTab() {
 
   function closeWizard() {
     setWizard(null);
+  }
+
+  /** Called when the user clicks "Edit" on a FIXED template card */
+  function handleEditTemplate(template: Template) {
+    setWizard(null); // close wizard if open
+    setViewState({ view: 'edit', template });
+  }
+
+  /** Called by FixedTemplateEditor on successful save */
+  function handleEditorDone(updated: TemplateForEditor) {
+    setTemplates((prev) =>
+      prev.map((t) => (t.id === updated.id ? (updated as Template) : t))
+    );
+    setViewState({ view: 'list' });
+  }
+
+  /** Called when the user clicks ← in the editor */
+  function handleEditorBack() {
+    setViewState({ view: 'list' });
+  }
+
+  // ── Editor view ────────────────────────────────────────────────────────────
+
+  if (viewState.view === 'edit') {
+    return (
+      <FixedTemplateEditor
+        template={viewState.template}
+        onDone={handleEditorDone}
+        onBack={handleEditorBack}
+      />
+    );
   }
 
   // ── Loading skeleton ───────────────────────────────────────────────────────
@@ -562,7 +606,11 @@ export function DaysTab() {
       {templates.length > 0 && (
         <>
           {templates.map((template) => (
-            <TemplateCard key={template.id} template={template} />
+            <TemplateCard
+              key={template.id}
+              template={template}
+              onEdit={handleEditTemplate}
+            />
           ))}
 
           {/* Add another button */}

@@ -1290,6 +1290,31 @@
   - Template saved and listed: wizard POSTs to `/api/templates`, response prepended to live list immediately ✓
 - Verified: `read_lints` returns no errors on all changed files
 
+### Task 6.6 — Days UI: fixed template editor ✅
+- **Prerequisite satisfied**: Task 6.5 (DaysTab with template list + create wizard) already in place
+- **New file — `src/components/days/FixedTemplateEditor.tsx`**:
+  - Exports `FixedTemplateEditor` (main editor), `TemplateBlockFull` and `TemplateForEditor` type interfaces used by both files
+  - **`ExercisePicker` overlay**: fixed bottom-sheet (rounds top on mobile, centered on sm+), backdrop dismiss; search input debounced 300 ms → `GET /api/exercises?search=…`; shows `Loader2` spinner while fetching, empty-state and error-state text; each result row is a 44 px min-height touch target with exercise name + type label
+  - **`BlockRow`**: renders one exercise block with:
+    - ▲ / ▼ reorder buttons (disabled at list boundaries with `opacity-25`)
+    - Clickable name/summary row toggling the inline config panel
+    - ⚙️ config toggle button (highlights purple when expanded)
+    - 🗑 remove button (hover turns red)
+    - **Expanded config panel**: 3-column grid for Sets / Rep min / Rep max (number inputs), Rest (select: 30 s – 5 min presets, custom value inserted if stored value not in list), Progression (select: Default/Double Progression/Straight Sets/Top Set+Backoff/RPE Based/None), Notes (text input, optional)
+  - **`FixedTemplateEditor`**: initialises `LocalBlock[]` state sorted by `orderIndex`; `handleMoveBlock`, `handleRemoveBlock`, `handleBlockChange`, `handleAddExercise` mutations; `handleSave` builds the `blocks[]` payload (with sequential `orderIndex`) and calls `PUT /api/templates/:id`; on success shows "Saved!" for 700 ms then calls `onDone(updatedTemplate)` to hand back the fresh API response; `savedOk` resets whenever blocks change
+  - `LocalBlock` uses `_key` (db id for existing, `new-{Date.now()}-{random}` for added) as stable React key — avoids collisions across add/remove cycles
+- **Updated — `src/components/days/DaysTab.tsx`**:
+  - `TemplateBlock` expanded to `extends TemplateBlockFull` — now carries `setsPlanned`, `repMin`, `repMax`, `restSeconds`, `progressionEngine`, `exercise { id, name, type, pattern, muscleGroups }`, `intensityTarget`, `notes`
+  - `Template` extends `TemplateForEditor` (from FixedTemplateEditor) so the same object can be passed straight to the editor without conversion
+  - Added `ViewState` discriminated union: `{ view: 'list' } | { view: 'edit'; template: Template }`; `viewState` state replaces the template list with `<FixedTemplateEditor>` when editing
+  - `TemplateCard` receives `onEdit` prop; FIXED cards show a **pencil (✏️) icon button** (top-right); SLOT cards show no edit button (Task 6.7 scope)
+  - `handleEditorDone`: splices updated template into the list by id — no refetch needed
+  - `handleEditorBack`: returns to list view without saving
+  - Editor view is rendered at the top of the conditional chain, before loading/error states, so the tab container's scroll position resets naturally
+- **Acceptance criteria verified**:
+  - Fixed template edits persist: `PUT /api/templates/:id` replaces all blocks in a Prisma transaction; `GET /api/templates` on next load returns updated data ✓
+- Verified: `tsc --noEmit` exits 0; `read_lints` returns no errors on both files
+
 ---
 
 ## Deferred Features Log
