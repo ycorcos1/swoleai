@@ -12,6 +12,7 @@ import { LayoutGrid, CalendarDays, Star, GitBranch } from 'lucide-react';
 import { SplitsTab } from '@/components/splits/SplitsTab';
 import { DaysTab } from '@/components/days/DaysTab';
 import { FavoritesTab } from '@/components/favorites/FavoritesTab';
+import { VersionsTab } from '@/components/versions/VersionsTab';
 
 type Tab = 'splits' | 'days' | 'favorites' | 'versions';
 
@@ -29,20 +30,6 @@ const TABS: TabConfig[] = [
 ];
 
 
-
-function VersionsTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-base-600)] mb-4">
-        <GitBranch className="h-8 w-8 text-[var(--color-accent-purple)]" />
-      </div>
-      <h2 className="text-lg font-semibold mb-1">No program versions</h2>
-      <p className="text-sm text-[var(--color-text-muted)] max-w-xs mb-6">
-        Every change to your routine is saved as a version inside a program block — so you can compare and roll back at any time.
-      </p>
-    </div>
-  );
-}
 
 const TAB_CONTENT: Record<Tab, React.ReactNode> = {
   splits:    <SplitsTab />,

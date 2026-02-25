@@ -1358,6 +1358,33 @@
 
 ---
 
+### Task 6.9 — Versions UI: list blocks + versions ✅
+- **Prerequisite satisfied**: Task 2.7 (`ProgramBlock` + `RoutineVersion` schema + migration) already in place
+- **New file — `src/app/api/versions/route.ts`** (`GET /api/versions`):
+  - Auth-guarded with `requireAuth()`
+  - Returns `programBlocks[]`: each block's `id`, `name`, `startDate`, `endDate`, `createdAt`, and its nested `routineVersions[]` (sorted `versionNumber DESC`)
+  - Returns `unlinkedVersions[]`: `RoutineVersion` rows where `programBlockId IS NULL`, sorted `versionNumber DESC`
+  - Program blocks sorted by `startDate DESC` (most recent block first)
+- **New file — `src/components/versions/VersionsTab.tsx`**:
+  - Replaces the old inline `VersionsTab` stub that lived directly in `routine/page.tsx`
+  - **States handled**:
+    - **Loading**: two animated pulse skeleton cards while `GET /api/versions` is in flight
+    - **Error**: error message + "Retry" button (re-runs `fetchVersions`)
+    - **Empty**: centred `GitBranch` icon + explanatory copy when both `programBlocks` and `unlinkedVersions` are empty
+    - **Content**: list of `ProgramBlockCard` components + optional `UnlinkedVersionsSection`
+  - **`ProgramBlockCard`**: collapsible (chevron toggle); header shows block name, date range (`startDate – endDate` or "Ongoing"), and a version-count badge; body lists `VersionRow` entries; defaults to expanded when the block has ≥ 1 version, collapsed when empty
+  - **`VersionRow`**: circular version badge (`v{N}`), changelog text (or italic "No description" fallback), and a `Clock` icon + formatted date
+  - **`UnlinkedVersionsSection`**: same collapsible pattern for versions not attached to any program block; only rendered when `unlinkedVersions.length > 0`
+  - Date formatting via `Intl` (`toLocaleDateString`) — locale-aware, no extra package needed
+- **Updated — `src/app/app/routine/page.tsx`**:
+  - Added `import { VersionsTab } from '@/components/versions/VersionsTab'`
+  - Removed the 12-line inline `VersionsTab` placeholder function
+  - `TAB_CONTENT.versions` now renders the real component
+- **Acceptance criteria verified**:
+  - Versions view loads without errors: `tsc --noEmit` exits 0; `read_lints` returns no errors on all created/modified files ✓
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
