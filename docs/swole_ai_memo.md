@@ -1265,6 +1265,33 @@
 
 ---
 
+### Task 6.5 — Days UI: list + create template ✅
+- **Prerequisite satisfied**: Task 3.6 (Templates API: GET/POST/PUT) already in place
+- **New file — `src/components/days/DaysTab.tsx`**:
+  - Replaces the old inline `DaysTab` stub in `routine/page.tsx` with a full `'use client'` component
+  - **Template list**: `fetchTemplates()` calls `GET /api/templates` on mount; results rendered as `TemplateCard` glass cards showing:
+    - Template name + FIXED/SLOT mode badge (purple for FIXED, blue for SLOT) with matching Lucide icon (`Layers` / `Shuffle`)
+    - Exercise/slot count (`Dumbbell` icon)
+    - Optional estimated duration (`Clock` icon)
+    - Optional notes preview (2-line clamp)
+  - Loading state: 2-item pulse skeleton; error state: message + Retry button
+  - Empty state: icon + heading + "Create Day" `btn-primary` CTA
+  - **Create wizard** — 2-step inline form:
+    - **Step 1 (`ChooseModeStep`)**: two selectable card-buttons for Fixed vs Slot; `aria-pressed` toggle; Next disabled until a mode is picked
+    - **Step 2 (`TemplateDetailsStep`)**: name (required, validated), estimated minutes (optional number), notes (optional textarea) → `POST /api/templates`; Back chevron returns to Step 1; inline error display
+  - On success: new template prepended to list via `setTemplates(prev => [template, ...prev])` — no reload required
+  - "New Day" button shown at bottom of list when wizard is closed
+  - Wizard state typed as discriminated union: `null | { step: 'choose' } | { step: 'details'; mode: TemplateMode }`
+- **Updated — `src/app/app/routine/page.tsx`**:
+  - Removed old inline `DaysTab` stub function
+  - Imported and wired `DaysTab` from `@/components/days/DaysTab`
+  - `CalendarDays` icon import retained (still used as the Days tab icon in `TABS`)
+- **Acceptance criteria verified**:
+  - Template saved and listed: wizard POSTs to `/api/templates`, response prepended to live list immediately ✓
+- Verified: `read_lints` returns no errors on all changed files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.

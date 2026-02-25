@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { LayoutGrid, CalendarDays, Star, GitBranch } from 'lucide-react';
 import { SplitsTab } from '@/components/splits/SplitsTab';
+import { DaysTab } from '@/components/days/DaysTab';
 
 type Tab = 'splits' | 'days' | 'favorites' | 'versions';
 
@@ -26,20 +27,6 @@ const TABS: TabConfig[] = [
   { id: 'versions',  label: 'Versions',  Icon: GitBranch    },
 ];
 
-function DaysTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-base-600)] mb-4">
-        <CalendarDays className="h-8 w-8 text-[var(--color-accent-purple)]" />
-      </div>
-      <h2 className="text-lg font-semibold mb-1">No saved workout days</h2>
-      <p className="text-sm text-[var(--color-text-muted)] max-w-xs mb-6">
-        Save a workout day as a reusable template — fixed exercises or slot-based (by muscle group).
-      </p>
-      <button className="btn-primary px-6">Create Day</button>
-    </div>
-  );
-}
 
 function FavoritesTab() {
   return (
