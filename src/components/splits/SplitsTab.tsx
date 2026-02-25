@@ -1,6 +1,7 @@
 /**
  * SplitsTab — Task 6.2: Splits UI: list + create
  *             Task 6.3: Splits UI: schedule editor
+ *             Task 6.4: Splits UI: activate
  *
  * - Fetches user's splits from GET /api/splits
  * - Renders each split as a glass card
@@ -8,12 +9,13 @@
  * - Form POSTs to /api/splits, then refreshes the list
  * - "Edit Schedule" opens inline weekday mapping UI per split
  * - PUT /api/splits/:id saves the schedule; reloads on success
+ * - "Activate" button (with inline confirmation) POSTs to /api/splits/:id/activate
  */
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutGrid, Plus, X, CheckCircle2, CalendarDays } from 'lucide-react';
+import { LayoutGrid, Plus, X, CheckCircle2, CalendarDays, Zap } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -72,11 +74,27 @@ const WEEKDAY_LONG: Record<WeekdayKey, string> = {
 interface SplitCardProps {
   split: Split;
   onEditSchedule: () => void;
+  onActivate: () => void;
+  activating: boolean;
 }
 
-function SplitCard({ split, onEditSchedule }: SplitCardProps) {
+function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardProps) {
+  const [confirming, setConfirming] = useState(false);
   const dayCount = split.scheduleDays.filter((d) => !d.isRest).length;
   const restCount = split.scheduleDays.filter((d) => d.isRest).length;
+
+  function handleActivateClick() {
+    setConfirming(true);
+  }
+
+  function handleConfirm() {
+    setConfirming(false);
+    onActivate();
+  }
+
+  function handleCancel() {
+    setConfirming(false);
+  }
 
   return (
     <GlassCard className="mb-3">
@@ -131,24 +149,75 @@ function SplitCard({ split, onEditSchedule }: SplitCardProps) {
           )}
         </div>
 
-        {/* Edit schedule button */}
-        <button
-          type="button"
-          onClick={onEditSchedule}
-          aria-label={`Edit schedule for ${split.name}`}
-          title="Edit schedule"
-          className={[
-            'flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)]',
-            'text-xs font-medium transition-colors',
-            'text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)]',
-            'bg-[var(--color-base-600)] hover:bg-[rgba(139,92,246,0.12)]',
-            'border border-transparent hover:border-[rgba(139,92,246,0.25)]',
-          ].join(' ')}
-        >
-          <CalendarDays className="h-3.5 w-3.5" />
-          Schedule
-        </button>
+        {/* Action buttons */}
+        <div className="flex flex-col gap-1.5 flex-shrink-0">
+          {/* Edit schedule button */}
+          <button
+            type="button"
+            onClick={onEditSchedule}
+            aria-label={`Edit schedule for ${split.name}`}
+            title="Edit schedule"
+            className={[
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)]',
+              'text-xs font-medium transition-colors',
+              'text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)]',
+              'bg-[var(--color-base-600)] hover:bg-[rgba(139,92,246,0.12)]',
+              'border border-transparent hover:border-[rgba(139,92,246,0.25)]',
+            ].join(' ')}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Schedule
+          </button>
+
+          {/* Activate button — only shown for inactive splits */}
+          {!split.isActive && (
+            <button
+              type="button"
+              onClick={handleActivateClick}
+              disabled={activating}
+              aria-label={`Activate split ${split.name}`}
+              title="Set as active split"
+              className={[
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)]',
+                'text-xs font-medium transition-colors',
+                'text-[var(--color-accent-purple)] hover:text-white',
+                'bg-[rgba(139,92,246,0.12)] hover:bg-[var(--color-accent-purple)]',
+                'border border-[rgba(139,92,246,0.3)] hover:border-[var(--color-accent-purple)]',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+              ].join(' ')}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              Activate
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Inline confirmation prompt */}
+      {confirming && (
+        <div className="mt-3 pt-3 border-t border-[var(--glass-border)]">
+          <p className="text-sm text-[var(--color-text-secondary)] mb-2.5">
+            Set <span className="font-semibold text-[var(--color-text-primary)]">{split.name}</span> as your active split? This will deactivate any currently active split.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={activating}
+              className="btn-primary text-xs py-1.5 px-4 flex-1 disabled:opacity-60"
+            >
+              {activating ? 'Activating…' : 'Yes, Activate'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn-secondary text-xs py-1.5 px-4"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </GlassCard>
   );
 }
@@ -578,6 +647,9 @@ export function SplitsTab() {
   const [showForm, setShowForm] = useState(false);
   /** ID of the split whose schedule editor is currently open (null = none) */
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  /** ID of the split currently being activated (null = none in flight) */
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
   const fetchSplits = useCallback(async () => {
     setLoading(true);
@@ -612,6 +684,35 @@ export function SplitsTab() {
       prev.map((s) => (s.id === updatedSplit.id ? updatedSplit : s))
     );
     setEditingScheduleId(null);
+  }
+
+  async function handleActivate(splitId: string) {
+    setActivatingId(splitId);
+    setActivateError(null);
+    try {
+      const res = await fetch(`/api/splits/${splitId}/activate`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          (data as { error?: string })?.error ?? `Failed to activate (${res.status})`
+        );
+      }
+      const data = (await res.json()) as { split: Split };
+      // Mark activated split as active, all others as inactive
+      setSplits((prev) =>
+        prev.map((s) =>
+          s.id === data.split.id
+            ? { ...s, ...data.split, isActive: true }
+            : { ...s, isActive: false }
+        )
+      );
+    } catch (err) {
+      setActivateError(err instanceof Error ? err.message : 'Could not activate split');
+    } finally {
+      setActivatingId(null);
+    }
   }
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
@@ -676,6 +777,13 @@ export function SplitsTab() {
         </div>
       )}
 
+      {/* Activation error */}
+      {activateError && (
+        <div className="mb-3 px-3 py-2.5 rounded-[var(--radius-md)] bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.25)]">
+          <p className="text-xs text-[var(--color-error)]">{activateError}</p>
+        </div>
+      )}
+
       {/* Split list */}
       {splits.length > 0 && (
         <>
@@ -696,6 +804,8 @@ export function SplitsTab() {
                   setShowForm(false);
                   setEditingScheduleId(split.id);
                 }}
+                onActivate={() => handleActivate(split.id)}
+                activating={activatingId === split.id}
               />
             )
           )}
