@@ -1755,6 +1755,62 @@
 
 ---
 
+## Phase 11 — Data Tools + Account Controls
+
+### Task 11.1 — Export endpoint (JSON + CSV) ✅
+- **Prerequisites satisfied**: Task 3.10
+- **New file — `src/app/api/data/export/route.ts`** (`GET /api/data/export`):
+  - Query param `format`: `json` (default) or `csv`
+  - Fetches user profile, all `WorkoutSession` rows (with nested `WorkoutExercise` + `WorkoutSet`), and `Favorite` rows in parallel
+  - **JSON**: Returns pretty-printed JSON payload (`{ exportedAt, version, user, sessions[], favorites[] }`) with `Content-Disposition: attachment; filename="swoleai-export-YYYY-MM-DD.json"`
+  - **CSV**: Flattens to one row per set; columns: `session_id, session_title, started_at, ended_at, status, split_name, template_name, exercise_name, set_index, weight, reps, rpe, flags, set_notes`; RFC-4180-compliant escaping via `csvEscape()`
+  - Returns `Content-Disposition: attachment` header on both formats so browser triggers a file download
+- **Acceptance criteria verified**: User can download export in both JSON and CSV formats ✓
+
+---
+
+### Task 11.2 — Import endpoint (JSON) ✅
+- **Prerequisites satisfied**: Task 11.1
+- **New file — `src/app/api/data/import/route.ts`** (`POST /api/data/import`):
+  - Validates request body with Zod: `importPayloadSchema` → `sessions[]` (max 500) each with `exercises[]` each with `sets[]`
+  - Wraps each session import in a `prisma.$transaction()` — one session failure does not block others
+  - **Exercise resolution**: looks up exercise by name (case-insensitive) across system exercises and user-owned custom exercises; creates a new custom exercise if no match found
+  - Creates `WorkoutSession → WorkoutExercise → WorkoutSet` rows; sets are bulk-inserted with `createMany`
+  - Returns `{ imported, total, errors[] }` — partial success is allowed; per-session errors are surfaced without aborting the whole import
+  - `flags` and `constraintFlags` JSON fields cast to `Prisma.InputJsonValue` to satisfy type-checker
+- **Acceptance criteria verified**: Imported data appears in history (returned by `GET /api/history`) ✓
+
+---
+
+### Task 11.3 — Download my data UI ✅
+- **Prerequisites satisfied**: Task 11.1
+- **Replaced placeholder — `src/app/app/settings/page.tsx`**:
+  - Full settings page replacing the "coming soon" stub
+  - **`DataSection` component**: "Export JSON" button → `window.location.href = /api/data/export?format=json`; "Export CSV" button → `?format=csv`; both trigger browser file-download immediately
+  - **Import flow**: hidden `<input type="file" accept=".json">` wired to a visible "Import JSON" button; on file select, reads file as text, `JSON.parse()`s it, `POST`s to `/api/data/import`; shows `CheckCircle` success pill (with count) or `AlertTriangle` error pill inline; resets file input after each attempt
+  - Import button disabled + shows "Importing…" while in-flight
+- **Acceptance criteria verified**: Download button triggers export file download ✓
+
+---
+
+### Task 11.4 — Delete account + data ✅
+- **Prerequisites satisfied**: Task 11.3
+- **New file — `src/app/api/data/account/route.ts`** (`DELETE /api/data/account`):
+  - Calls `requireAuth()` → deletes the `User` row via `prisma.user.delete({ where: { id: userId } })`
+  - All related data (sessions, exercises, favorites, splits, templates, proposals, versions, etc.) is removed by Prisma cascade deletes defined in schema
+  - Returns `{ deleted: true }` with HTTP 200
+- **`DeleteAccountSection` component** (in settings page):
+  - Red "Delete Account" button in a "Danger Zone" card
+  - Opens `ConfirmDeleteModal` on click
+- **`ConfirmDeleteModal` component**:
+  - Full-screen overlay (`role="dialog" aria-modal`); shows `AlertTriangle` icon, title, two-paragraph warning ("cannot be undone" + "consider downloading first")
+  - "Cancel" and "Yes, Delete Everything" buttons; delete button disabled + shows "Deleting…" during in-flight request
+  - On 200 response: calls `signOut({ callbackUrl: '/' })` — user is signed out and redirected to homepage
+  - On error: inline `AlertTriangle` red pill with error message; modal stays open
+- **Acceptance criteria verified**: User data is removed and user is logged out ✓; `tsc --noEmit` exits 0; no linter errors
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
