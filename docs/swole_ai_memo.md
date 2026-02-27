@@ -1707,6 +1707,54 @@
 
 ---
 
+---
+
+## Phase 10 — Generate Day From Favorites
+
+### Task 10.1 — Deterministic slot filler (favorites-first) ✅
+- **Prerequisites satisfied**: Task 6.7, Task 6.8
+- **New file — `src/lib/slot-filler/deterministic.ts`**:
+  - Exports `fillSlotsFromFavorites(slots, favorites, recentlyUsedExerciseIds)` — pure TypeScript, no DB calls
+  - For each slot: filters favorites by `exercise.muscleGroups` (case-insensitive) → applies `patternConstraints` (allowed/excluded) as hard filters → applies `equipmentConstraints` (allowed/excluded) as hard filters → excludes exercises already assigned to a prior slot in the same run
+  - Sort order: PRIMARY (non-recent) → PRIMARY (recent) → BACKUP (non-recent) → BACKUP (recent)
+  - Picks up to `exerciseCount` exercises; returns `SlotFillResult[]` with `exercises[]` + `unfilledCount`
+  - Exports types: `FavoriteExercise`, `FavoriteWithPriority`, `SlotInput`, `SlotConstraints`, `FilledExercise`, `SlotFillResult`
+- **Acceptance criteria verified**: If favorites exist for a slot, they are chosen before non-favorites ✓
+
+---
+
+### Task 10.2 — AI gap-filler for missing slots ✅
+- **Prerequisites satisfied**: Task 10.1, Task 9.4
+- **Modified — `src/lib/coach/schemas.ts`**: added `AiGapFillerSchema` (Zod) + `AiGapFiller` type for validating AI gap-fill responses; schema enforces slot array with per-slot exercise arrays (each with `exerciseId` + `exerciseName`)
+- **New file — `src/app/api/templates/[id]/generate-day/route.ts`** (`POST /api/templates/:id/generate-day`):
+  - Requires template to be `mode: SLOT`; 404 if not found or wrong mode; 422 if no slots defined
+  - Loads user favorites with full exercise data (type, pattern, muscleGroups)
+  - Derives recently-used exercise IDs from last 3 completed `WorkoutSession` records
+  - Runs `fillSlotsFromFavorites()` (Task 10.1) to fill from favorites
+  - For slots with `unfilledCount > 0`: queries exercise catalog (system + user custom) filtered per slot's muscle group + constraints → passes constrained candidate list (max 30 per slot) to OpenAI `gpt-4o-mini` with `response_format: json_object`, temp 0.3
+  - Validates AI JSON with `AiGapFillerSchema.safeParse()`; for each AI-suggested `exerciseId`, checks it against the `allowed` set we supplied (invalid IDs silently dropped — no hallucinated exercises)
+  - Returns `{ generatedDay: GeneratedSlot[], templateId, templateName, fullyFilled }` — stateless preview, nothing persisted
+  - AI errors are non-fatal: partial fill is returned with remaining `unfilledCount > 0`
+- **Acceptance criteria verified**: Only valid exercises selected (catalog-constrained + ID-validated); output is reviewable proposal ✓
+
+---
+
+### Task 10.3 — "Generate from Favorites" UI in template editor ✅
+- **Prerequisites satisfied**: Task 10.2
+- **Modified — `src/components/days/SlotTemplateEditor.tsx`**:
+  - Added `Wand2`, `Check`, `AlertCircle` icons from `lucide-react`
+  - New local types: `ExerciseSource`, `GeneratedExercise`, `GeneratedSlot`, `GeneratedDay`
+  - New `SourceBadge` component: purple "Primary" pill / blue "Backup" pill / yellow "AI" pill per exercise source
+  - New `GeneratedDayPreview` component: shows per-slot exercise lists with name, set×rep range, source badge; displays `unfilledCount` warning per slot; Dismiss + "Save as Fixed Template" action buttons
+  - New state: `generating`, `generateError`, `generatedDay`, `accepting`, `acceptError`, `acceptedTemplateName`
+  - `handleGenerate()`: POSTs to `/api/templates/:id/generate-day`, sets `generatedDay` on success
+  - `handleAcceptGenerated()`: flattens all generated exercises into ordered `blocks[]` → POSTs to `POST /api/templates` with `mode: FIXED`, name `"{original name} – {Mon DD}"` → shows success label on commit
+  - "Generate from Favorites" button (with `Wand2` icon) appears above slot list when slots exist and no preview is active; loading spinner during generation; generate error shown inline; success label ("Saved as …") shown after accept
+  - Generated preview replaces the button while visible; Dismiss hides it
+- **Acceptance criteria verified**: Accepted generated day can be saved as a stable FIXED template ✓; `tsc --noEmit` exits 0; no linter errors
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.

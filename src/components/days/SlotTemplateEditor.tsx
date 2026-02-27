@@ -27,6 +27,9 @@ import {
   Save,
   Loader2,
   Shuffle,
+  Wand2,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import { type TemplateForEditor, type TemplateSlotFull } from './FixedTemplateEditor';
 
@@ -474,6 +477,174 @@ function AddSlotPanel({ onAdd, onCancel }: AddSlotPanelProps) {
   );
 }
 
+// ── Generated-day types ────────────────────────────────────────────────────
+
+type ExerciseSource = 'favorite_primary' | 'favorite_backup' | 'ai';
+
+interface GeneratedExercise {
+  exerciseId: string;
+  exerciseName: string;
+  setsPlanned: number;
+  repMin: number;
+  repMax: number;
+  source: ExerciseSource;
+}
+
+interface GeneratedSlot {
+  slotIndex: number;
+  muscleGroup: string;
+  exerciseCount: number;
+  defaultSets: number;
+  defaultRepMin: number;
+  defaultRepMax: number;
+  exercises: GeneratedExercise[];
+  unfilledCount: number;
+}
+
+interface GeneratedDay {
+  generatedDay: GeneratedSlot[];
+  templateId: string;
+  templateName: string;
+  fullyFilled: boolean;
+}
+
+// ── Source badge ───────────────────────────────────────────────────────────
+
+function SourceBadge({ source }: { source: ExerciseSource }) {
+  if (source === 'favorite_primary') {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide bg-[rgba(139,92,246,0.18)] text-[var(--color-accent-purple)]">
+        Primary
+      </span>
+    );
+  }
+  if (source === 'favorite_backup') {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide bg-[rgba(59,130,246,0.18)] text-[var(--color-accent-blue)]">
+        Backup
+      </span>
+    );
+  }
+  return (
+    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide bg-[rgba(234,179,8,0.18)] text-yellow-400">
+      AI
+    </span>
+  );
+}
+
+// ── GeneratedDayPreview ────────────────────────────────────────────────────
+
+interface GeneratedDayPreviewProps {
+  result: GeneratedDay;
+  onAccept: () => void;
+  onDismiss: () => void;
+  accepting: boolean;
+  acceptError: string | null;
+}
+
+function GeneratedDayPreview({
+  result,
+  onAccept,
+  onDismiss,
+  accepting,
+  acceptError,
+}: GeneratedDayPreviewProps) {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-accent-purple)] bg-[rgba(139,92,246,0.06)] overflow-hidden mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--glass-border)]">
+        <div className="flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-[var(--color-accent-purple)]" />
+          <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+            Generated Day Preview
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss preview"
+          className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Slot-by-slot exercise list */}
+      <div className="px-3 py-2 space-y-3">
+        {result.generatedDay.map((slot) => (
+          <div key={slot.slotIndex}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-1 capitalize">
+              {slot.muscleGroup}
+            </p>
+            {slot.exercises.length === 0 ? (
+              <p className="text-xs text-[var(--color-text-muted)] italic">
+                No exercises found for this slot.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {slot.exercises.map((ex) => (
+                  <li
+                    key={ex.exerciseId}
+                    className="flex items-center gap-2 text-xs bg-[var(--color-base-700)] rounded px-2 py-1.5"
+                  >
+                    <span className="flex-1 font-medium truncate">{ex.exerciseName}</span>
+                    <span className="text-[var(--color-text-muted)] tabular-nums flex-shrink-0">
+                      {ex.setsPlanned}×{ex.repMin}–{ex.repMax}
+                    </span>
+                    <SourceBadge source={ex.source} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {slot.unfilledCount > 0 && (
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                {slot.unfilledCount} exercise{slot.unfilledCount > 1 ? 's' : ''} could not be filled.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Accept error */}
+      {acceptError && (
+        <div className="mx-3 mb-2 flex items-center gap-1.5 text-xs text-[var(--color-error)]">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          {acceptError}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 px-3 pb-3">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="btn-secondary flex-1 text-xs py-2"
+        >
+          Dismiss
+        </button>
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={accepting}
+          className="btn-primary flex-1 text-xs py-2 flex items-center justify-center gap-1.5 disabled:opacity-60"
+        >
+          {accepting ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              Save as Fixed Template
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── SlotTemplateEditor ─────────────────────────────────────────────────────
 
 export interface SlotTemplateEditorProps {
@@ -494,6 +665,14 @@ export function SlotTemplateEditor({ template, onDone, onBack }: SlotTemplateEdi
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
+
+  // ── Generate-from-favorites state ──────────────────────────────────────
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generatedDay, setGeneratedDay] = useState<GeneratedDay | null>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [acceptedTemplateName, setAcceptedTemplateName] = useState<string | null>(null);
 
   // Reset savedOk when slots change
   useEffect(() => {
@@ -538,6 +717,95 @@ export function SlotTemplateEditor({ template, onDone, onBack }: SlotTemplateEdi
       },
     ]);
     setShowAddPanel(false);
+  }
+
+  // ── Generate from favorites ────────────────────────────────────────────
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError(null);
+    setGeneratedDay(null);
+    setAcceptedTemplateName(null);
+
+    try {
+      const res = await fetch(`/api/templates/${template.id}/generate-day`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          (data as { error?: string })?.error ?? `Request failed (${res.status})`,
+        );
+      }
+
+      const data = (await res.json()) as GeneratedDay;
+      setGeneratedDay(data);
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Failed to generate day');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleAcceptGenerated() {
+    if (!generatedDay) return;
+
+    setAccepting(true);
+    setAcceptError(null);
+
+    // Flatten slot exercises into ordered blocks for a new FIXED template
+    const blocks: {
+      orderIndex: number;
+      exerciseId: string;
+      setsPlanned: number;
+      repMin: number;
+      repMax: number;
+      restSeconds: number;
+    }[] = [];
+
+    let blockIdx = 0;
+    for (const slot of generatedDay.generatedDay) {
+      for (const ex of slot.exercises) {
+        blocks.push({
+          orderIndex: blockIdx++,
+          exerciseId: ex.exerciseId,
+          setsPlanned: ex.setsPlanned,
+          repMin: ex.repMin,
+          repMax: ex.repMax,
+          restSeconds: 120,
+        });
+      }
+    }
+
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const newName = `${template.name} – ${today}`;
+
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName,
+          mode: 'FIXED',
+          blocks,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          (data as { error?: string })?.error ?? `Request failed (${res.status})`,
+        );
+      }
+
+      setAcceptedTemplateName(newName);
+      setGeneratedDay(null);
+    } catch (err) {
+      setAcceptError(err instanceof Error ? err.message : 'Failed to save template');
+    } finally {
+      setAccepting(false);
+    }
   }
 
   // ── Save ───────────────────────────────────────────────────────────────
@@ -615,6 +883,52 @@ export function SlotTemplateEditor({ template, onDone, onBack }: SlotTemplateEdi
           <p className="text-xs text-[var(--color-text-muted)]">Slot template · Edit slots</p>
         </div>
       </div>
+
+      {/* Generate from Favorites — action button */}
+      {slots.length > 0 && !generatedDay && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={generating}
+            className="btn-secondary w-full flex items-center justify-center gap-2 text-sm disabled:opacity-60"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <Wand2 className="h-4 w-4" />
+                Generate from Favorites
+              </>
+            )}
+          </button>
+          {generateError && (
+            <p className="text-xs text-[var(--color-error)] mt-1.5 text-center">
+              {generateError}
+            </p>
+          )}
+          {acceptedTemplateName && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--color-success)] justify-center">
+              <Check className="h-3.5 w-3.5" />
+              Saved as &ldquo;{acceptedTemplateName}&rdquo;
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Generated day preview */}
+      {generatedDay && (
+        <GeneratedDayPreview
+          result={generatedDay}
+          onAccept={handleAcceptGenerated}
+          onDismiss={() => setGeneratedDay(null)}
+          accepting={accepting}
+          acceptError={acceptError}
+        />
+      )}
 
       {/* Section label */}
       {slots.length > 0 && (

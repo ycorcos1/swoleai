@@ -176,6 +176,30 @@ export const GoalsProposalSchema = z.object({
 export type GoalsProposal = z.infer<typeof GoalsProposalSchema>;
 
 // =============================================================================
+// GENERATE_DAY — AI gap-filler schema (Task 10.2)
+// =============================================================================
+// Used when the deterministic slot filler leaves slots unfilled.
+// The AI receives a constrained catalog per unfilled slot and must return
+// exercise picks only from that list. We validate all returned IDs against
+// the catalog before trusting them.
+
+const AiGapExerciseSchema = z.object({
+  exerciseId: z.string().min(1),
+  exerciseName: z.string().min(1),
+});
+
+const AiGapSlotSchema = z.object({
+  muscleGroup: z.string().min(1),
+  exercises: z.array(AiGapExerciseSchema).min(0).max(10),
+});
+
+export const AiGapFillerSchema = z.object({
+  slots: z.array(AiGapSlotSchema).min(1).max(20),
+});
+
+export type AiGapFiller = z.infer<typeof AiGapFillerSchema>;
+
+// =============================================================================
 // Union helper — validate proposalJson by type
 // =============================================================================
 
