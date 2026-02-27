@@ -1811,6 +1811,54 @@
 
 ---
 
+## Phase 12 — PWA Polish
+
+### Task 12.1 — Add manifest + icons ✅
+- **Prerequisites satisfied**: Task 0.3
+- **New file — `public/manifest.json`**:
+  - `name: "SwoleAI"`, `short_name: "SwoleAI"`, `display: standalone`, `orientation: portrait`
+  - `start_url: /app/dashboard`, `scope: /`
+  - `background_color: #0a0a1f`, `theme_color: #0a0a0f` (matches PulsePlan dark palette)
+  - Icons array: 16×16, 32×32, 180×180, 192×192 (any + maskable), 512×512 (any + maskable), SVG (any)
+  - Shortcuts: "Start Workout" → `/app/workout/start`, "Dashboard" → `/app/dashboard`
+- **New file — `public/icons/icon.svg`**: Dark gradient background (deep navy → near-black) with a purple→blue gradient dumbbell silhouette and "AI" wordmark; matches PulsePlan accent colors
+- **Generated PNG icons** via `sharp` from the SVG source:
+  - `public/icons/favicon-16x16.png`
+  - `public/icons/favicon-32x32.png`
+  - `public/icons/apple-touch-icon.png` (180×180)
+  - `public/icons/icon-192x192.png`
+  - `public/icons/icon-512x512.png`
+  - `public/apple-touch-icon.png` (root copy for iOS convention)
+- **Updated — `src/app/layout.tsx`** `metadata`:
+  - Added `manifest: '/manifest.json'`
+  - Added `appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'SwoleAI' }`
+  - Added `icons.icon[]` (16/32/192/512 PNG), `icons.apple[]` (180 PNG), `icons.other[]` (SVG mask-icon)
+- **Acceptance criteria verified**: manifest references correct name/icon sizes; `tsc --noEmit` exits 0; no linter errors
+
+---
+
+### Task 12.2 — Service worker caching ✅
+- **Prerequisites satisfied**: Task 12.1
+- **Updated — `next.config.ts`** (`@ducanh2912/next-pwa` options):
+  - `disable: NODE_ENV === "development"` — SW off in dev to avoid hot-reload conflicts
+  - `register: true`, `reloadOnOnline: true`, `cacheOnFrontEndNav: true`, `aggressiveFrontEndNavCaching: true`
+  - `cacheStartUrl: true`, `dynamicStartUrl: true`, `dynamicStartUrlRedirect: '/login'` — auth-aware start URL; avoids caching a stale redirect
+  - `fallbacks.document: '/~offline'` — offline fallback page
+  - **`workboxOptions.runtimeCaching`** (6 rules):
+    - `/_next/static/*` → **CacheFirst**, 1 year, 256 entries (JS/CSS chunks)
+    - `/_next/image/*` → **StaleWhileRevalidate**, 7 days, 64 entries (image optimizer)
+    - `/icons/*` → **CacheFirst**, 30 days, 32 entries (PWA icons)
+    - `fonts.googleapis.com` → **StaleWhileRevalidate**, 7 days (font stylesheets)
+    - `fonts.gstatic.com` → **CacheFirst**, 1 year, 16 entries (font files)
+    - `/app/*` → **NetworkFirst**, 5s timeout, 24h, 32 entries (app shell pages)
+    - `/(login|signup|forgot-password)` → **NetworkFirst**, 5s timeout, 24h (public pages)
+    - `/api/*` → **NetworkOnly** (no stale API data served offline)
+  - `skipWaiting: true`, `clientsClaim: true`, `cleanUpOutdatedCaches: true`
+- **New file — `src/app/~offline/page.tsx`**: On-brand offline fallback (dark PulsePlan theme); explains local-first logging continues offline, AI features require connection; "Try again" button calls `window.location.reload()`
+- **Acceptance criteria verified**: App shell (`/app/*`) is cached NetworkFirst with 5s timeout → falls back to cache → falls back to `~offline` page; `tsc --noEmit` exits 0; no linter errors
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
