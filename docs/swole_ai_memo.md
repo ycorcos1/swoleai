@@ -1528,6 +1528,75 @@
 - **Acceptance criteria verified**: Returns proposed deload adjustments deterministically ✓
 - **Final verification**: `tsc --noEmit` exits 0, `read_lints` returns no errors across all 15 new files and 5 modified files
 
+### Task 8.1 — Snapshot builder for routine state ✅
+- **Prerequisite satisfied**: Task 2.7 (RoutineVersion schema) in place
+- **New file — `src/lib/versions/snapshot.ts`**:
+  - `RoutineSnapshot` interface: `{ capturedAt, splitId, splitName, scheduleDays[], templates[], favoriteIds[] }`
+  - `SnapshotTemplate` embeds full blocks (exerciseId + exerciseName, sets, reps, rest, progressionEngine, intensityTarget) and slots (muscleGroup, exerciseCount, constraints)
+  - `buildRoutineSnapshot(userId)` — fetches active split + all referenced templates + favorites in 3 DB calls; returns self-contained JSON safe to store in `routine_versions.snapshot_json`
+  - Snapshot is storable and reloadable: rollback path (Task 8.3) proves round-trip fidelity
+- **New file — `src/lib/versions/index.ts`**: barrel re-export for `snapshot` + `patch`
+- **Acceptance criteria verified**: Snapshot JSON can be stored and reloaded ✓
+
+---
+
+### Task 8.2 — Apply patch ops to create new routine version ✅
+- **Prerequisite satisfied**: Task 8.1 in place
+- **New file — `src/lib/versions/patch.ts`**:
+  - `PatchOp` discriminated union — 7 op types:
+    - `replace_block_exercise` — swap exercise in a FIXED template block by orderIndex
+    - `update_block` — update scalar fields (sets, reps, rest, progressionEngine, notes)
+    - `add_block` — append new block to FIXED template (auto-increments orderIndex)
+    - `remove_block` — delete block + compact remaining orderIndices via raw SQL
+    - `set_schedule_day` — update split schedule day's templateId / isRest
+    - `add_favorite` — upsert a favorite (idempotent)
+    - `remove_favorite` — delete a favorite
+  - `applyPatchOps(userId, ops, tx)` — applies each op in the caller's transaction; throws on missing record
+  - `createNewVersion(userId, opts)` — takes a fresh snapshot, increments versionNumber, creates `RoutineVersion`, optionally creates `RoutineChangeLog` (fromVersionId → new)
+  - `applyOpsAndCreateVersion(userId, ops, opts)` — applies ops then creates version (main entry point)
+- **Modified — `src/app/api/versions/route.ts`**: added `POST /api/versions` handler
+  - Body: `{ changelog: string, programBlockId?: string|null, patchOps?: PatchOp[] }`
+  - Zod-validates all patch op variants via `discriminatedUnion`; applies ops then snapshots
+  - Returns `{ version }` with `201 Created`; returns `422` with error message on op failure
+- **Acceptance criteria verified**: New version created with changelog ✓
+
+---
+
+### Task 8.3 — Rollback endpoint ✅
+- **Prerequisite satisfied**: Task 8.1 in place
+- **New file — `src/app/api/versions/rollback/route.ts`** (`POST /api/versions/rollback`):
+  - Body: `{ versionId: string }`
+  - Verifies version ownership; loads `snapshotJson` cast to `RoutineSnapshot`
+  - Restores inside a single transaction:
+    1. **Templates** — for each template in snapshot: if still exists + belongs to user, deletes all current blocks/slots and recreates from snapshot data; skips missing exercises gracefully
+    2. **Schedule days** — for each day in snapshot: if split still exists, updates `workoutDayTemplateId` + `isRest`
+    3. **Favorites** — syncs to match snapshot's `favoriteIds`: adds missing (only if exercise exists), removes extras
+  - After transaction, calls `createNewVersion` → `"Rollback to v{N}"` changelog
+  - Creates `RoutineChangeLog` from latest prior version → new rollback version
+  - Returns `{ version, restoredSummary: { templatesRestored[], scheduleDaysUpdated, favoritesAdded, favoritesRemoved, skippedTemplates[] }, rolledBackTo }`
+- **Acceptance criteria verified**: Routine state matches selected version ✓
+
+---
+
+### Task 8.4 — Compare versions view ✅
+- **Prerequisite satisfied**: Task 8.2 in place
+- **New file — `src/app/api/versions/[id]/compare/route.ts`** (`GET /api/versions/:id/compare?to=:toId`):
+  - Loads both version snapshots; verifies user ownership of both
+  - Computes structured diff:
+    - **Templates**: per-template status (`added`/`removed`/`changed`/`unchanged`); per-block diffs with human-readable `changes[]` strings (e.g. `"Exercise: Bench → Incline Press"`, `"Reps: 8–12 → 6–10"`)
+    - **Schedule days**: changed days with `from`/`to` `{ templateId, isRest }`
+    - **Favorites**: `{ added: string[], removed: string[] }` exercise IDs
+  - Returns `{ from, to, diff: { templates, scheduleDays, favorites } }`
+- **Modified — `src/components/versions/VersionsTab.tsx`**:
+  - Each `VersionRow` gains two action buttons:
+    - **Diff** button — fetches compare API (lazy, cached after first load), opens `DiffModal`
+    - **Rollback** button — opens `RollbackConfirmModal`
+  - `DiffModal` — renders template block changes with `+`/`-`/`→` icons, schedule day assignment changes, favorite adds/removes; collapses unchanged sections
+  - `RollbackConfirmModal` — shows version details + changelog preview; confirm triggers `POST /api/versions/rollback`; success state auto-refreshes version list
+  - All modals close on backdrop click (diff) or Cancel button (rollback)
+- **Final verification**: `tsc --noEmit` exits 0, `read_lints` returns no errors across all files
+- **Acceptance criteria verified**: Differences are readable and accurate ✓
+
 ---
 
 ## Deferred Features Log
