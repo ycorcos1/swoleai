@@ -10,8 +10,9 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { CheckCircle2, Dumbbell, Moon } from 'lucide-react';
+import { CheckCircle2, Dumbbell, Moon, Loader2 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,13 +47,22 @@ const JS_DAY_TO_WEEKDAY: Record<number, string> = {
 
 // ── Dashboard Page ────────────────────────────────────────────────────────────
 
+const COACH_ACTIONS: { label: string; endpoint: string }[] = [
+  { label: 'Next Session Plan', endpoint: '/api/coach/next-session' },
+  { label: 'Weekly Check-in', endpoint: '/api/coach/weekly-checkin' },
+  { label: 'Diagnose Plateau', endpoint: '/api/coach/plateau' },
+  { label: 'Goals Review', endpoint: '/api/coach/goals' },
+];
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [dateString, setDateString] = useState<string>('');
   const [activeSplit, setActiveSplit] = useState<Split | null>(null);
   const [todayDay, setTodayDay] = useState<ScheduleDay | null | undefined>(
     undefined // undefined = not yet resolved
   );
   const [loadingSplit, setLoadingSplit] = useState(true);
+  const [coachGenerating, setCoachGenerating] = useState<string | null>(null);
 
   // Compute date on client side to use user's local timezone
   useEffect(() => {
@@ -218,12 +228,34 @@ export default function DashboardPage() {
 
       {/* Coach Actions Card */}
       <GlassCard className="mb-4">
-        <h3 className="mb-3 font-semibold">Coach Actions</h3>
+        <h3 className="mb-3 font-semibold">AI Coach</h3>
         <div className="grid grid-cols-2 gap-2">
-          <button className="btn-secondary text-sm">Next Session Plan</button>
-          <button className="btn-secondary text-sm">Weekly Check-in</button>
-          <button className="btn-secondary text-sm">Diagnose Plateau</button>
-          <button className="btn-secondary text-sm">Goals Review</button>
+          {COACH_ACTIONS.map(({ label, endpoint }) => (
+            <button
+              key={label}
+              disabled={coachGenerating !== null}
+              onClick={async () => {
+                setCoachGenerating(label);
+                try {
+                  const res = await fetch(endpoint, { method: 'POST' });
+                  const data = await res.json();
+                  if (res.ok && data.proposal?.id) {
+                    router.push(`/app/coach/${data.proposal.id}`);
+                  } else {
+                    router.push('/app/coach');
+                  }
+                } catch {
+                  router.push('/app/coach');
+                } finally {
+                  setCoachGenerating(null);
+                }
+              }}
+              className="btn-secondary text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {coachGenerating === label && <Loader2 className="h-3 w-3 animate-spin" />}
+              {label}
+            </button>
+          ))}
         </div>
       </GlassCard>
 

@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   Dumbbell,
   CalendarDays,
-  BarChart3,
+  Bot,
   Settings,
 } from 'lucide-react';
 
@@ -20,7 +20,7 @@ const navItems: NavItem[] = [
   { href: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/workout', label: 'Workout', icon: Dumbbell },
   { href: '/app/routine', label: 'Routine', icon: CalendarDays },
-  { href: '/app/insights', label: 'Insights', icon: BarChart3 },
+  { href: '/app/coach', label: 'Coach', icon: Bot },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ];
 

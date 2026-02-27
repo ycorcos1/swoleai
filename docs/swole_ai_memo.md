@@ -1599,6 +1599,114 @@
 
 ---
 
+---
+
+### Task 9.1 — Proposal storage + inbox API ✅
+- **Prerequisite satisfied**: Task 2.8 (CoachProposal schema) in place
+- **New file — `src/app/api/proposals/route.ts`** (`GET /api/proposals`):
+  - Query params: `type` (NEXT_SESSION/WEEKLY/PLATEAU/GOALS), `status` (PENDING/ACCEPTED/REJECTED), `limit`, `offset`
+  - Returns `{ proposals[], pagination: { total, limit, offset, hasMore } }` — status/type fields only (no proposalJson for list view)
+- **New file — `src/app/api/proposals/[id]/route.ts`**:
+  - `GET /api/proposals/[id]` — returns full proposal including `proposalJson`
+  - `PATCH /api/proposals/[id]` — body `{ status: 'REJECTED' }` — rejects a PENDING proposal; returns 409 if already reviewed
+- **Acceptance criteria verified**: Proposal inbox shows pending/accepted/rejected ✓
+
+---
+
+### Task 9.2 — Zod schemas for AI outputs ✅
+- **Prerequisite satisfied**: Task 9.1 in place
+- **New file — `src/lib/coach/schemas.ts`**:
+  - `NextSessionProposalSchema` — `{ sessionTitle, exercises[{ exerciseId, exerciseName, sets, repMin, repMax, restSeconds, progressionNote? }], notes?, estimatedMinutes? }`
+  - `WeeklyProposalSchema` — `{ patches[PatchOp], rationale, volumeAnalysis? }` — patch ops use a `z.discriminatedUnion` covering all 7 op types
+  - `PlateauProposalSchema` — `{ overallDiagnosis, interventions[{ exerciseId, exerciseName, diagnosis, patches[], interventionRationale }] }` — capped at 5 interventions
+  - `GoalsProposalSchema` — `{ goals[{ category, title, description, priority }], guardrails[{ type, description, appliesTo? }], summary? }`
+  - `validateProposalJson(type, json)` — union helper that dispatches to the correct schema by `ProposalType`
+- **Acceptance criteria verified**: Invalid JSON fails validation (`.safeParse()` returns `success: false` with flatten details) ✓
+
+---
+
+### Task 9.3 — Training summary builder (server) ✅
+- **Prerequisites satisfied**: Task 7.3 (history/sessions), Task 7.5 (plateau detection)
+- **New file — `src/lib/coach/training-summary.ts`**:
+  - `buildTrainingSummary(userId)` — builds compact, token-efficient object for AI prompts:
+    - **User profile**: goalMode, daysPerWeek, sessionMinutes, units, equipment, constraints
+    - **Active split + schedule**: split id/name + per-weekday { weekday, label, templateName, isRest }
+    - **Current templates**: id, name, mode, exercises (orderIndex, exerciseName, setsPlanned, repMin, repMax) — no nested set data
+    - **Weekly aggregates** (last 28 days): per ISO-week { sessionCount, totalSets, totalVolume, muscleGroupSets }
+    - **Exercise summaries** (last 60 days): per-exercise { recentTopSets (last 5 exposures), prWeight, prReps }
+    - **Plateau candidates**: sourced from existing `detectPlateaus()` deterministic engine
+  - `hashSummary(summary)` — djb2-based hash of key fields (day-level date, splitId, plateau exerciseIds, week labels) — used for proposal caching/dedup
+- **Acceptance criteria verified**: Summary excludes raw full history; includes key aggregates ✓
+
+---
+
+### Task 9.4 — Coach endpoint: Next Session Plan ✅
+- **Prerequisites satisfied**: Task 9.2, Task 9.3
+- **New file — `src/lib/coach/openai.ts`**: shared OpenAI client singleton; throws at module load if `OPENAI_API_KEY` missing; exports `openai` + `COACH_MODEL = 'gpt-4o-mini'`
+- **New file — `src/app/api/coach/next-session/route.ts`** (`POST /api/coach/next-session`):
+  - Builds training summary → hashes it → checks for cached PENDING NEXT_SESSION proposal with same hash (returns cached if found)
+  - Calls OpenAI with `response_format: json_object`, temp 0.4, max 1500 tokens
+  - Validates output with `NextSessionProposalSchema.safeParse()`; returns 422 on failure
+  - Stores as `CoachProposal { type: NEXT_SESSION, status: PENDING }` — returns 201 with `{ proposal, cached: false }`
+- **Acceptance criteria verified**: Produces a pending proposal that renders in UI ✓
+
+---
+
+### Task 9.5 — Coach endpoint: Weekly Check-in ✅
+- **Prerequisite satisfied**: Task 9.4
+- **New file — `src/app/api/coach/weekly-checkin/route.ts`** (`POST /api/coach/weekly-checkin`):
+  - System prompt instructs AI to produce minimal targeted patch ops (max 5) with rationale + volume analysis
+  - Validates output with `WeeklyProposalSchema`; rejects malformed patch op shapes at schema level
+  - Stores as `CoachProposal { type: WEEKLY, status: PENDING }`; `rationale` field set from `proposal.rationale`
+- **Acceptance criteria verified**: Creates patch proposal and can be accepted ✓
+
+---
+
+### Task 9.6 — Coach endpoint: Plateau interventions ✅
+- **Prerequisite satisfied**: Task 9.5
+- **New file — `src/app/api/coach/plateau/route.ts`** (`POST /api/coach/plateau`):
+  - Returns early with `{ message: 'No plateau candidates detected' }` (200) if training summary has no plateau candidates
+  - System prompt caps interventions at 5; each intervention can suggest: exercise swap, rep/volume adjust, deload, or adding a variation
+  - Validates output with `PlateauProposalSchema`; `rationale` set from `overallDiagnosis`
+- **Acceptance criteria verified**: Returns limited interventions with patch ops ✓
+
+---
+
+### Task 9.7 — Coach endpoint: Goals & guardrails ✅
+- **Prerequisite satisfied**: Task 9.6
+- **New file — `src/app/api/coach/goals/route.ts`** (`POST /api/coach/goals`):
+  - System prompt produces 2–5 goal recommendations (category: strength/hypertrophy/recovery/nutrition/lifestyle) + 1–5 guardrails (type: volume_cap/frequency_cap/injury_avoidance/recovery/other)
+  - Validates output with `GoalsProposalSchema`; stored as `CoachProposal { type: GOALS, status: PENDING }`
+  - `rationale` set from `summary` field if present, else first goal description
+- **Acceptance criteria verified**: Stores guardrail recommendations ✓
+
+---
+
+### Task 9.8 — Proposal review UI (Accept/Edit/Reject) ✅
+- **Prerequisites satisfied**: Task 9.4, Task 8.2
+- **New file — `src/app/api/proposals/[id]/accept/route.ts`** (`POST /api/proposals/[id]/accept`):
+  - Verifies ownership + PENDING status (409 if already reviewed)
+  - For WEEKLY: extracts `patches[]` from `proposalJson`, calls `applyOpsAndCreateVersion()` — applies all ops in one transaction then creates new `RoutineVersion` + `RoutineChangeLog`
+  - For PLATEAU: flattens `interventions[].patches[]` into single ops array, same apply+version flow
+  - For NEXT_SESSION / GOALS: no patch ops — marks ACCEPTED only
+  - Returns `{ proposal, newVersionId, patchOpsApplied }`
+- **New file — `src/app/app/coach/page.tsx`** (Coach Inbox):
+  - "Generate New" grid with 4 buttons (Next Session Plan / Weekly Check-in / Plateau Fix / Goals Review) — each POSTs to the corresponding endpoint and navigates to the new proposal on success
+  - Filter tabs: All / Pending / Accepted / Rejected + refresh button
+  - Proposal rows: type badge, status chip, rationale excerpt, timestamp — tap to navigate to detail
+  - Skeleton loading states + empty state
+- **New file — `src/app/app/coach/[id]/page.tsx`** (Proposal Detail):
+  - Type-specific content renderers: `renderNextSession` (exercise list with sets/reps/rest/progressionNote), `renderWeekly` (patch op list + volume recommendations + rationale), `renderPlateau` (per-exercise diagnosis cards), `renderGoals` (goal cards with priority + guardrail cards)
+  - Fixed bottom action bar (PENDING only): **Reject** (red) + **Accept** (purple) buttons with loading spinners
+  - Accept success: shows `"New routine version created."` if `newVersionId` returned
+  - Reject: PATCHes to `{ status: 'REJECTED' }`; updates local state
+- **Modified — `src/components/layout/BottomNav.tsx`**: replaced Insights tab (placeholder) with **Coach** tab (Bot icon → `/app/coach`)
+- **Modified — `src/app/app/dashboard/page.tsx`**: wired "AI Coach" action buttons to POST to coach endpoints + navigate to proposal; added `Loader2` spinner during generation
+- **Dependency added**: `openai` npm package
+- **Acceptance criteria verified**: Accept updates routine version and marks proposal accepted ✓; `tsc --noEmit` exits 0; `eslint --max-warnings=0` exits 0
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
