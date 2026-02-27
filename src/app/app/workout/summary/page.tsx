@@ -18,6 +18,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { db, type CompletedWorkoutSummary } from '@/lib/offline/db';
 import { GlassCard } from '@/components/ui/GlassCard';
+import type { PRResult } from '@/lib/rules/types';
 import {
   CheckCircle2,
   Clock,
@@ -26,6 +27,7 @@ import {
   Loader2,
   LayoutDashboard,
   Sparkles,
+  Trophy,
 } from 'lucide-react';
 
 // =============================================================================
@@ -179,6 +181,47 @@ function ExerciseSummaryCard({ name, sets, exerciseIndex }: ExerciseSummaryCardP
 }
 
 // =============================================================================
+// PR BADGE COMPONENT (Task 7.4)
+// =============================================================================
+
+const PR_TYPE_CONFIG: Record<
+  PRResult['type'],
+  { label: string; color: string; bg: string }
+> = {
+  LOAD_PR:   { label: 'Load PR',     color: 'text-[var(--color-warning)]',       bg: 'bg-[var(--color-warning)]/10' },
+  REP_PR:    { label: 'Rep PR',      color: 'text-[var(--color-accent-purple)]', bg: 'bg-[var(--color-accent-purple)]/10' },
+  E1RM_PR:   { label: 'e1RM PR',     color: 'text-[var(--color-success)]',       bg: 'bg-[var(--color-success)]/10' },
+  VOLUME_PR: { label: 'Volume PR',   color: 'text-[var(--color-accent-blue)]',   bg: 'bg-[var(--color-accent-blue)]/10' },
+};
+
+function PRBadge({ pr }: { pr: PRResult }) {
+  const cfg = PR_TYPE_CONFIG[pr.type];
+  return (
+    <div
+      className={`flex flex-col gap-0.5 px-3 py-2 rounded-xl border border-[var(--glass-border)] ${cfg.bg}`}
+    >
+      <div className="flex items-center gap-1.5">
+        <Trophy className={`h-3.5 w-3.5 shrink-0 ${cfg.color}`} />
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${cfg.color}`}>
+          {cfg.label}
+        </span>
+      </div>
+      <p className="text-xs font-semibold text-[var(--color-text-primary)] truncate max-w-[140px]">
+        {pr.exerciseName}
+      </p>
+      <p className="text-[11px] text-[var(--color-text-muted)]">
+        {pr.newValue} {pr.unit}
+        {pr.previousBest !== null && (
+          <span className="ml-1">
+            (was {pr.previousBest})
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// =============================================================================
 // EMPTY / ERROR STATES
 // =============================================================================
 
@@ -224,6 +267,37 @@ export default function WorkoutSummaryPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawSummary]);
+
+  // PR detection (Task 7.4) — fetch from server when serverSessionId is available
+  const [prs, setPrs] = React.useState<PRResult[]>([]);
+  const [prsLoading, setPrsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!summary?.serverSessionId) return;
+
+    let cancelled = false;
+    setPrsLoading(true);
+
+    fetch('/api/rules/prs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: summary.serverSessionId }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data.prs)) {
+          setPrs(data.prs as PRResult[]);
+        }
+      })
+      .catch(() => {
+        // Silently ignore — PR display is non-critical
+      })
+      .finally(() => {
+        if (!cancelled) setPrsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [summary?.serverSessionId]);
 
   // Sort exercises by their orderIndex for consistent display
   const sortedExercises = summary?.exercises
@@ -299,6 +373,28 @@ export default function WorkoutSummaryPage() {
           </div>
         </GlassCard>
       </div>
+
+      {/* ── PR Badges (Task 7.4) ── */}
+      {(prsLoading || prs.length > 0) && (
+        <section className="px-4 mb-6">
+          <h2 className="text-sm font-medium text-[var(--color-text-muted)] mb-3 uppercase tracking-wider flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-[var(--color-warning)]" />
+            Personal Records
+          </h2>
+          {prsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking records…
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {prs.map((pr, idx) => (
+                <PRBadge key={`${pr.type}-${pr.exerciseId}-${idx}`} pr={pr} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Exercise breakdown ── */}
       {sortedExercises.length > 0 && (

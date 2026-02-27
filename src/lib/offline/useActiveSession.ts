@@ -221,6 +221,7 @@ export function useActiveSession(): UseActiveSessionReturn {
 
         const summary: CompletedWorkoutSummary = {
           id: 'last',
+          serverSessionId: current.serverSessionId,
           title: current.title,
           startedAt: current.startedAt,
           endedAt,

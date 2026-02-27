@@ -219,6 +219,8 @@ export interface UndoAction {
 export interface CompletedWorkoutSummary {
   /** Fixed key — only the most recent completed workout is stored */
   id: 'last';
+  /** Server-side session ID (set once sync has completed; used for PR detection) */
+  serverSessionId?: string;
   /** Session title */
   title?: string;
   /** When the workout started */

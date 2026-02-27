@@ -29,13 +29,13 @@ import {
   Timer,
   Square,
   MoreVertical,
-  ChevronRight,
   Clock,
   TrendingUp,
   Undo2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
-import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList } from '@/components/workout';
+import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList, SwapExerciseSheet } from '@/components/workout';
 
 // =============================================================================
 // TYPES
@@ -51,6 +51,8 @@ interface ExerciseCardProps {
   onTapEditSet: (set: ActiveSessionSet) => void;
   /** Drag handle node injected by SortableExerciseList (Task 5.9) */
   dragHandle?: React.ReactNode;
+  /** Swap button handler (Task 7.2) */
+  onTapSwap?: () => void;
 }
 
 interface BottomBarProps {
@@ -113,7 +115,7 @@ function ElapsedTime({ startedAt }: ElapsedTimeProps) {
  * - Individual sets as tappable pills (Task 5.4)
  * - Add set button
  */
-function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSwap }: ExerciseCardProps) {
   // Calculate sets summary
   const setsCount = exercise.sets.length;
   const completedSets = exercise.sets.filter((s) => s.weight > 0 || s.reps > 0);
@@ -143,36 +145,50 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle }: Exerc
           className="flex-1 min-w-0 text-left transition-all active:scale-[0.99]"
         >
           <div className="flex items-start justify-between gap-3">
-            {/* Exercise Info */}
-            <div className="flex-1 min-w-0">
-              {/* Exercise Name */}
-              <h3 className="font-semibold text-base truncate">
-                {exercise.exerciseName}
-              </h3>
+          {/* Exercise Info */}
+              <div className="flex-1 min-w-0">
+                {/* Exercise Name */}
+                <h3 className="font-semibold text-base truncate">
+                  {exercise.exerciseName}
+                </h3>
 
-              {/* Sets Summary */}
-              <div className="flex items-center gap-3 mt-1.5">
-                {/* Sets count badge */}
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
-                  {setsCount} set{setsCount !== 1 ? 's' : ''}
-                </span>
-
-                {/* Best set indicator */}
-                {bestSet && (
-                  <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
-                    <TrendingUp className="h-3 w-3" />
-                    <span className="tabular-nums">
-                      {bestSet.weight} × {bestSet.reps}
-                    </span>
+                {/* Sets Summary */}
+                <div className="flex items-center gap-3 mt-1.5">
+                  {/* Sets count badge */}
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-base-600)] text-[var(--color-text-secondary)]">
+                    {setsCount} set{setsCount !== 1 ? 's' : ''}
                   </span>
-                )}
-              </div>
-            </div>
 
-            {/* Add Set Button */}
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--color-accent-purple)] to-[var(--color-accent-blue)] shadow-sm shrink-0">
-              <Plus className="h-4 w-4 text-white" />
-            </div>
+                  {/* Best set indicator */}
+                  {bestSet && (
+                    <span className="flex items-center gap-1 text-xs text-[var(--color-accent-purple)]">
+                      <TrendingUp className="h-3 w-3" />
+                      <span className="tabular-nums">
+                        {bestSet.weight} × {bestSet.reps}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Right-side action buttons */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Swap button (Task 7.2) */}
+                {onTapSwap && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onTapSwap(); }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-base-600)] hover:bg-[var(--color-base-500)] active:scale-95 transition-all"
+                    aria-label={`Swap ${exercise.exerciseName}`}
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                  </button>
+                )}
+
+                {/* Add Set Button */}
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--color-accent-purple)] to-[var(--color-accent-blue)] shadow-sm">
+                  <Plus className="h-4 w-4 text-white" />
+                </div>
+              </div>
           </div>
         </button>
       </div>
@@ -338,7 +354,7 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, addExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction } = useActiveSessionContext();
+  const { session, isLoading, endSession, addExercise, updateExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
@@ -353,6 +369,9 @@ export default function WorkoutSessionPage() {
   const [editingSet, setEditingSet] = useState<ActiveSessionSet | null>(null);
   // Add Exercise sheet state (Task 5.8)
   const [showAddExerciseSheet, setShowAddExerciseSheet] = useState(false);
+  // Swap Exercise sheet state (Task 7.2)
+  const [swapTargetExercise, setSwapTargetExercise] = useState<ActiveSessionExercise | null>(null);
+  const [showSwapSheet, setShowSwapSheet] = useState(false);
 
   // =============================================================================
   // HANDLERS
@@ -362,6 +381,24 @@ export default function WorkoutSessionPage() {
   const handleAddExercise = useCallback(() => {
     setShowAddExerciseSheet(true);
   }, []);
+
+  // Handler to open the Swap sheet (Task 7.2)
+  const handleOpenSwap = useCallback((exercise: ActiveSessionExercise) => {
+    setSwapTargetExercise(exercise);
+    setShowSwapSheet(true);
+  }, []);
+
+  // Handler to perform the swap (Task 7.2)
+  const handleSwapExercise = useCallback(
+    async (newExerciseId: string, newExerciseName: string) => {
+      if (!swapTargetExercise) return;
+      await updateExercise(swapTargetExercise.localId, {
+        exerciseId: newExerciseId,
+        exerciseName: newExerciseName,
+      });
+    },
+    [swapTargetExercise, updateExercise]
+  );
 
   const handleToggleTimer = useCallback(() => {
     // TODO: Task 5.7 - Implement rest timer
@@ -542,6 +579,7 @@ export default function WorkoutSessionPage() {
                 exercise={exercise}
                 onTapAddSet={() => handleAddSetTap(exercise)}
                 onTapEditSet={(set) => handleEditSetTap(exercise, set)}
+                onTapSwap={() => handleOpenSwap(exercise)}
                 dragHandle={dragHandle}
               />
             )}
@@ -589,6 +627,17 @@ export default function WorkoutSessionPage() {
         onAddExercise={addExercise}
         currentExerciseIds={session?.exercises.map((e) => e.exerciseId) ?? []}
       />
+
+      {/* Swap Exercise Sheet (Task 7.2) */}
+      {swapTargetExercise && (
+        <SwapExerciseSheet
+          isOpen={showSwapSheet}
+          onClose={() => { setShowSwapSheet(false); setSwapTargetExercise(null); }}
+          targetExerciseId={swapTargetExercise.exerciseId}
+          targetExerciseName={swapTargetExercise.exerciseName}
+          onSwap={handleSwapExercise}
+        />
+      )}
     </div>
   );
 }

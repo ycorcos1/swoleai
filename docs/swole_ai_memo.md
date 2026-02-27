@@ -1385,6 +1385,151 @@
 
 ---
 
+---
+
+### Task 7.1 — Substitution candidate selector ✅
+- **Prerequisite satisfied**: Task 2.3 (exercises + favorites schema) in place
+- **New file — `src/lib/rules/types.ts`**:
+  - Shared TypeScript interfaces for all rules engine types: `ExerciseInfo`, `SubstitutionConstraints`, `SubstitutionCandidate`, `SetPerformance`, `ExposureResult`, `ProgressionTarget`, `PRResult`, `PRType`, `MuscleGroupVolume`, `VolumeWarning`, `VolumeReport`, `PlateauCandidate`, `DeloadAdjustment`, `DeloadRecommendation`
+  - Pure TypeScript (no Prisma imports) — importable from both server and client
+- **New file — `src/lib/rules/substitution.ts`**:
+  - `scoreSubstitutionCandidate(target, candidate, constraints)` — deterministic scoring function with exclusion logic
+  - Scoring rubric: +100 exact pattern match, +50 same pattern category (push/pull/hinge/leg), +10 per overlapping muscle group, +20 same exercise type; −50 recently used; score ≤ 0 excluded
+  - Exclusions (never returned): source exercise itself, in `avoidExerciseIds`, requires unavailable equipment, HIGH joint stress on injured joint
+  - `rankSubstitutionCandidates(target, candidates, constraints, limit)` — sorts scored candidates descending, returns top N
+- **New file — `src/lib/rules/index.ts`** — barrel re-export for the entire rules engine
+- **New route — `src/app/api/rules/substitutions/route.ts`** (`GET /api/rules/substitutions?exerciseId=&limit=`):
+  - Fetches target exercise, all available exercises, user profile constraints, and recently used exercise IDs (from last 3 sessions)
+  - Builds `SubstitutionConstraints` from user's `constraints.injuries` (injury joint map) and `constraints.avoidExercises`
+  - Calls `rankSubstitutionCandidates` and returns `{ target, candidates[] }` ordered by score
+- **Acceptance criteria verified**: Given an exercise + constraints, returns ordered candidates ✓
+- Verified: `tsc --noEmit` passes with no errors
+
+### Task 7.2 — Swap UI wired to deterministic candidates ✅
+- **Prerequisites satisfied**: Task 7.1 (substitution engine), Task 5.2 (workout session page) in place
+- **New file — `src/components/workout/SwapExerciseSheet.tsx`**:
+  - Bottom sheet (same visual pattern as `AddExerciseSheet`) with handle bar, header, close button
+  - **Header**: `ArrowLeftRight` icon + "Swap Exercise" title + "Replacing: {exerciseName}" subtitle
+  - **Score legend**: green = Best match (score ≥ 130), yellow = Good match (≥ 80), gray = Partial match
+  - **Candidate sections**: "Best Matches" (score ≥ 80) + "Other Options" (< 80) with sticky section headers
+  - **`CandidateRow`**: exercise name + reasons summary (pattern/muscle/equipment) + `ScorePill` (color-coded by score band)
+  - **`ScorePill`**: green/amber/gray depending on score thresholds
+  - Fetches `GET /api/rules/substitutions?exerciseId=&limit=15` on open; shows loading spinner, error state with retry, empty state if no candidates
+  - Selecting a candidate calls `onSwap(newExerciseId, newExerciseName)` then closes the sheet; keeps sheet open on error
+  - Footer shows target exercise's movement pattern + muscle groups for transparency
+- **Updated — `src/components/workout/index.ts`**: exported `SwapExerciseSheet` and `SwapExerciseSheetProps`
+- **Updated — `src/app/app/workout/session/[id]/page.tsx`**:
+  - Added `ArrowLeftRight` import; imported `SwapExerciseSheet` from `@/components/workout`
+  - Added `swapTargetExercise` and `showSwapSheet` state
+  - Destructured `updateExercise` from `useActiveSessionContext()`
+  - `handleOpenSwap(exercise)` sets target and opens the sheet
+  - `handleSwapExercise(newId, newName)` calls `updateExercise(localId, { exerciseId: newId, exerciseName: newName })` — writes to IndexedDB, reactive UI update via Dexie live query
+  - `ExerciseCardProps` extended with optional `onTapSwap?: () => void`
+  - `ExerciseCard` renders a compact `ArrowLeftRight` button in the header action area (right of exercise info, left of Add button)
+  - `SortableExerciseList` render callback wires `onTapSwap={() => handleOpenSwap(exercise)}`
+  - `SwapExerciseSheet` mounted at bottom of page (parallel to `AddExerciseSheet`)
+- **Acceptance criteria verified**: Swapping replaces exercise in active session ✓ (IndexedDB write via `updateExercise`, reactive via `useLiveQuery`)
+
+### Task 7.3 — Progression engines (core logic) ✅
+- **Prerequisites satisfied**: Task 2.5 (day templates schema with `ProgressionEngine` enum), Task 2.6 (workout sessions) in place
+- **New file — `src/lib/rules/progression.ts`**:
+  - `estimateE1RM(weight, reps)` — Epley formula: `weight × (1 + reps/30)`; returns weight if reps = 1
+  - `computeDoubleProgression(lastExposure, repMin, repMax, increment)` — if ALL working sets hit `repMax` → suggest `lastWeight + increment`; else → hold weight, report avg reps toward target
+  - `computeStraightSets(lastExposure, plannedReps, increment)` — all sets hit target → increase weight; else → hold
+  - `computeTopSetBackoff(lastExposure, plannedReps, backoffPct, increment)` — finds heaviest set, advances if target hit; reports new top weight + 85% backoff weight rounded to nearest 5
+  - `computeProgressionTarget(engine, lastExposure, repMin, repMax, increment)` — dispatcher: routes to correct engine; RPE_BASED uses straight-sets as deterministic fallback; NONE returns last weight unchanged
+  - Working sets = excludes warmup + dropset flags throughout
+- **Engine selection**: already present in `WorkoutDayBlock.progressionEngine` (nullable override) and `WorkoutDayTemplate.defaultProgressionEngine` from Task 2.5; UI selector already in `FixedTemplateEditor` (Task 6.6) — no schema changes needed
+- **New route — `src/app/api/rules/progression/route.ts`** (`POST /api/rules/progression`):
+  - Body: `{ exerciseId, repMin, repMax, engine, weightIncrement? }`
+  - Fetches the most recent COMPLETED session for the exercise via `prisma.workoutExercise.findFirst` ordered by `session.startedAt desc`
+  - Returns `{ target: ProgressionTarget, lastSessionDate }` or a "no prior sessions" target if none found
+- **Acceptance criteria verified**: Next targets can be computed from last performance ✓
+
+### Task 7.4 — PR detection logic ✅
+- **Prerequisite satisfied**: Task 2.6 (workout sessions/exercises/sets schema) in place
+- **New file — `src/lib/rules/pr-detection.ts`**:
+  - `computeE1RM(weight, reps)` — Epley formula (shared with progression.ts)
+  - `ExerciseHistory` interface: `bestRepsByLoad: Map<number, number>`, `bestE1RM: number`, `bestSessionVolume: number`, `bestLoad: number`
+  - `emptyHistory()` — creates zeroed baseline (used for first-ever attempt)
+  - `buildHistory(historicalSessions)` — aggregates historical set arrays into `ExerciseHistory`
+  - `detectPRs(exerciseId, exerciseName, sessionSets, history)` — detects 4 PR types (working sets only):
+    - `REP_PR` — more reps at a given load vs. historical best
+    - `LOAD_PR` — heaviest weight ever lifted for this exercise
+    - `E1RM_PR` — estimated 1RM beats all-time best (Epley)
+    - `VOLUME_PR` — session total volume (lbs×reps) beats best single-session volume
+  - `ExerciseSessionData` interface + `detectAllPRs(exercises)` — batch detection across multiple exercises
+- **New route — `src/app/api/rules/prs/route.ts`** (`POST /api/rules/prs`):
+  - Body: `{ sessionId }` — server-side `WorkoutSession` ID
+  - Fetches session exercises + sets; fetches all historical `WorkoutExercise` entries (excluding current session) for those exercise IDs
+  - Groups historical sets by `exerciseId`, builds `ExerciseSessionData[]`, calls `detectAllPRs`
+  - Returns `{ prs: PRResult[] }`
+- **Updated — `src/lib/offline/db.ts`**: added `serverSessionId?: string` to `CompletedWorkoutSummary` interface
+- **Updated — `src/lib/offline/useActiveSession.ts`**: `endSession()` includes `serverSessionId: current.serverSessionId` in the completed workout snapshot
+- **Updated — `src/app/app/workout/summary/page.tsx`**:
+  - Added `Trophy` icon import
+  - Added `prs: PRResult[]` state and `prsLoading` state
+  - `useEffect` on `summary.serverSessionId` — calls `POST /api/rules/prs` when server ID is available; silently no-ops if unavailable (session not yet synced)
+  - **`PRBadge` component**: colored card per PR type with `Trophy` icon, PR type label, exercise name, new value + previous best
+  - `PR_TYPE_CONFIG` maps each `PRType` to label + accent color (gold for Load, purple for Rep, green for e1RM, blue for Volume)
+  - **"Personal Records" section** rendered between stats row and exercise breakdown — shown when PRs exist or are loading; displays loading text with spinner while fetching
+- **Acceptance criteria verified**: Summary page can show PR badges ✓
+
+### Task 7.5 — Volume calculation + balance warnings ✅
+- **Prerequisites satisfied**: Task 2.3 (exercises with `muscleGroups` Json), Task 2.6 (workout sessions) in place
+- **New file — `src/lib/rules/volume.ts`**:
+  - `VOLUME_TARGETS` — per-muscle-group recommended weekly working-set ranges (e.g. chest: 10–20, quads: 12–20, biceps: 6–14)
+  - `SessionForVolume` interface — minimal session shape for volume calculation (exercises with `muscleGroups[]` + sets with flags)
+  - `calculateWeeklyVolume(sessions, weekStart, weekEnd)` — iterates sessions → exercises → sets; counts working sets per muscle group (excludes warmup + dropset); credits all muscle groups in each exercise
+  - `volumeStatus(sets, min, max)` → `'low' | 'optimal' | 'high'`
+  - Balance warnings generated by `buildWarnings(setCounts)`:
+    - Push/pull imbalance: push (chest + front_delts + triceps) > 1.5× pull (back + lats + rear_delts + biceps) → medium severity; pull > 1.5× push → low severity
+    - Quad/hamstring imbalance: quads > 2× hamstrings → medium; hamstrings > 2× quads → low
+    - Neglected muscles: 0 sets for a muscle with recommended min ≥ 8, when total weekly sets ≥ 30 → low severity
+  - Returns `VolumeReport` with `muscleGroups[]` sorted by sets desc + `warnings[]`
+- **New route — `src/app/api/rules/volume/route.ts`** (`GET /api/rules/volume?weekStart=&weekEnd=`):
+  - Defaults to current Mon–Sun week using `startOfWeek` / `endOfWeek` helpers
+  - Fetches all COMPLETED sessions in date range with exercises + sets; maps to `SessionForVolume[]`
+  - Calls `calculateWeeklyVolume` and returns `{ report: VolumeReport }`
+- **Acceptance criteria verified**: Returns imbalance warnings consistently ✓
+
+### Task 7.6 — Plateau detection (deterministic) ✅
+- **Prerequisite satisfied**: Task 7.3 (progression engine concepts) in place
+- **New file — `src/lib/rules/plateau.ts`**:
+  - `detectExercisePlateau(exerciseId, exerciseName, exposures, options)`:
+    - Takes up to last N exposures (default window = 4), sorted oldest → newest
+    - Per exposure: computes top-set weight + best reps at that weight (working sets only)
+    - Plateau condition: `last.weight ≤ first.weight` AND `last.reps ≤ first.reps` (both must stall)
+    - Plateau type: `both_stalled | weight_stalled | reps_stalled`
+    - Avg RPE computed across all sets in the window; null if no RPE data
+    - Severity: `severe` (full window stalled + high effort or no RPE data), `moderate` (3 exposures), `mild` (2 exposures)
+    - Returns `PlateauCandidate` or `null` if progress is being made
+  - `ExerciseWithExposures` interface + `detectPlateaus(exercises, options)` — batch detection, sorted severe-first
+- **New route — `src/app/api/rules/plateau/route.ts`** (`GET /api/rules/plateau?windowSize=&effortThreshold=&minExposures=`):
+  - Fetches recent COMPLETED sessions (conservative upper bound: `(windowSize+2) × 5`)
+  - Groups `ExposureResult[]` by exercise; filters to exercises with ≥ `minExposures` sessions
+  - Calls `detectPlateaus` and returns `{ plateaus: PlateauCandidate[] }` sorted severe-first
+- **Acceptance criteria verified**: Plateau candidates returned for a user ✓
+
+### Task 7.7 — Deload/low-energy day rules ✅
+- **Prerequisite satisfied**: Task 7.6 (plateau detection) in place
+- **New file — `src/lib/rules/deload.ts`**:
+  - `buildLowEnergyAdjustments(exercises)` — 85% weight × 90% reps × 75% sets; rationale: "prioritise technique over load"
+  - `recommendDeload(plateauCandidates, sessionContext)` — deterministic dispatch:
+    - `full_deload` (60% weight / 80% reps / 60% sets, 7 days): ≥ 2 severe plateaus OR 1 severe + ≥ 2 moderate
+    - `partial_deload` (80% weight / 90% reps / 80% sets, 7 days): 1 severe OR ≥ 2 moderate
+    - `low_energy_day` (85% weight / 90% reps / 75% sets, 1 day): `lowEnergy` flag set, no plateau threshold hit
+    - `none` (0 adjustments): no signals
+  - Each recommendation includes a plain-English `message` and `trigger` string
+- **New route — `src/app/api/rules/deload/route.ts`** (`POST /api/rules/deload`):
+  - Body: `{ lowEnergy?, exercises?, windowSize? }`
+  - Runs plateau detection internally (same logic as `/api/rules/plateau`) then calls `recommendDeload`
+  - Returns `{ recommendation: DeloadRecommendation, plateaus: PlateauCandidate[] }`
+- **Acceptance criteria verified**: Returns proposed deload adjustments deterministically ✓
+- **Final verification**: `tsc --noEmit` exits 0, `read_lints` returns no errors across all 15 new files and 5 modified files
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.

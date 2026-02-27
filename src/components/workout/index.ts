@@ -14,3 +14,7 @@ export type { AddExerciseSheetProps } from './AddExerciseSheet';
 // Task 5.9 — Reorder exercises
 export { SortableExerciseList } from './SortableExerciseList';
 export type { SortableExerciseListProps } from './SortableExerciseList';
+
+// Task 7.2 — Swap exercise (deterministic substitution)
+export { SwapExerciseSheet } from './SwapExerciseSheet';
+export type { SwapExerciseSheetProps } from './SwapExerciseSheet';
