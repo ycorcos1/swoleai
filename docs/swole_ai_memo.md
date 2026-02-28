@@ -1859,6 +1859,74 @@
 
 ---
 
+## Phase 13 — Final UX Pages
+
+### Task 13.1 — Dashboard UI wiring ✅
+- **Prerequisites satisfied**: Task 6.4, Task 5.10
+- **Modified — `src/app/app/dashboard/page.tsx`**:
+  - **Quick Stats** section wired with real data: `GET /api/history?limit=1&status=COMPLETED&startDate=…&endDate=…` (week-scoped) → `pagination.total` for workouts-this-week count; `GET /api/history?limit=1&status=COMPLETED` for last-session chip; `GET /api/profile` for `daysPerWeek` target (renders as `N / target` or just `N`)
+  - **Recent Activity** section: `GET /api/proposals?limit=3` → lists latest coach proposals with status badges (PENDING amber / ACCEPTED green / REJECTED red); each row is a `<Link>` to `/app/coach/[id]`; empty state shown when no proposals exist
+  - **PR Trophy prompt**: shown when a last session exists; links to `/app/insights` for PR tracking
+  - Skeleton pulse loaders on all async sections; errors gracefully silenced (stats default to `—`)
+  - Removed duplicate `SyncStatusPill` from page header — the `AppShell` global header already renders one
+- **Acceptance criteria verified**: Dashboard reflects real user state (live split, live weekly count, live proposals) ✓
+
+---
+
+### Task 13.2 — Insights page ✅
+- **Prerequisites satisfied**: Task 7.5, Task 7.4
+- **Replaced placeholder — `src/app/app/insights/page.tsx`**:
+  - **Volume Balance section**: `GET /api/rules/volume` → CSS bar chart (one row per muscle group with sets > 0), sorted by descending volume; amber bars + `AlertTriangle` icon for imbalance warnings from `report.warnings`; empty state when no sessions logged this week
+  - **PR Feed section**: chains `GET /api/history?limit=1&status=COMPLETED` → `POST /api/rules/prs` (with `sessionId`); displays typed PR badges with colour coding — LOAD_PR (amber), REP_PR (purple), E1RM_PR (green), VOLUME_PR (blue); "keep pushing" message when session has no PRs; empty state when no sessions exist
+  - **Plateau Alerts section**: `GET /api/rules/plateau` → lists plateau candidates (up to 5) with severity icons and colour-coded labels (mild/moderate/severe); section hidden when no plateaus detected
+  - All three sections use skeleton loaders; plateau section omitted entirely when empty to keep UI clean
+- **Acceptance criteria verified**: Insights render meaningful data from real API responses ✓
+
+---
+
+### Task 13.3 — History page ✅
+- **Prerequisites satisfied**: Task 3.10
+- **New file — `src/app/app/history/page.tsx`**:
+  - Paginated session list (`GET /api/history?status=COMPLETED&limit=20&offset=…`); shows total count in header
+  - Each `SessionCard` shows: title (fallback chain: session.title → split.name → template.name → "Freestyle Workout"), date + time, duration, set/exercise count
+  - Expanding a card calls `GET /api/history/[id]` to fetch full detail; renders exercises in order with numbered headers; each set shows `weight × reps`, optional RPE, flag chips (W/B/D/F with colour badges); session notes shown if present
+  - Inline error + retry on detail fetch failure
+  - "Load more" button for pagination; refresh button in header
+  - Skeleton loaders on initial load; empty state when no completed sessions exist
+- **New file — `src/app/api/history/[id]/route.ts`** (`GET /api/history/[id]`):
+  - Returns full `WorkoutSession` scoped to `userId`; includes exercises (ordered by `orderIndex`) and sets (ordered by `setIndex`); computes `durationMinutes` from `startedAt`/`endedAt`
+  - Returns 404 when session not found or not owned by user
+- **Acceptance criteria verified**: Users can view past sessions with full exercise/set detail ✓
+
+---
+
+### Task 13.4 — Goals page ✅
+- **Prerequisites satisfied**: Task 9.7
+- **New file — `src/app/app/goals/page.tsx`**:
+  - **`GoalsWizard` component**: fetches current profile on mount (`GET /api/profile`); renders option-picker UI for goalMode (Hypertrophy / Strength / Hybrid), daysPerWeek (2–6 pill buttons), sessionMinutes (45/60/75/90/120m), equipment (Commercial / Home), units (Imperial / Metric); saves via `PUT /api/profile`; inline success/error feedback
+  - **`AIGuardrails` component**: fetches latest GOALS proposal (`GET /api/proposals?type=GOALS&limit=1` + `GET /api/proposals/[id]` for full `proposalJson`); renders goals inline (with priority badges: high red / medium amber / low green) and guardrails (green shield cards with type labels and `appliesTo` list); "Get AI Goals Review" button → `POST /api/coach/goals` → navigates to `/app/coach/[id]` on success; `refresh` counter prop re-fetches latest proposal after wizard save
+- **New file — `src/app/api/profile/route.ts`** (`GET` + `PUT /api/profile`):
+  - `GET`: returns `id, email, goalMode, daysPerWeek, sessionMinutes, units, equipment, constraints, onboardingComplete, createdAt` for authenticated user
+  - `PUT`: validates body with Zod (`updateSchema`); updates only provided fields; returns updated profile
+- **Acceptance criteria verified**: Goals wizard saves to DB; AI guardrails fetched and rendered; goals data available to coach via `buildTrainingSummary` which reads same user profile fields ✓
+
+---
+
+### Task 13.5 — Settings page ✅
+- **Prerequisites satisfied**: Task 11.4
+- **Replaced — `src/app/app/settings/page.tsx`**:
+  - **`ProfileSection`**: displays email and member-since date from `GET /api/profile`; units toggle (Imperial/Metric) calls `PUT /api/profile` on click with inline "Saving…" / "Saved" feedback
+  - **`QuickLinksSection`**: card links to History (`/app/history`), Goals (`/app/goals`), and Coach (`/app/coach`) — these routes are not in the bottom nav so this is the primary nav entry point for them
+  - **`SyncSection`**: renders `<SyncStatusPill>` with explanatory copy about offline-first logging
+  - **`DataSection`**: export JSON/CSV + import JSON (unchanged from Task 11.3)
+  - **`LogoutSection`**: Logout button calls `signOut({ callbackUrl: '/' })`; shows "Logging out…" spinner during sign-out
+  - **`DeleteAccountSection`** + **`ConfirmDeleteModal`**: unchanged delete flow from Task 11.4
+- **Modified — `src/components/layout/BottomNav.tsx`**:
+  - Replaced `Coach` (Bot icon → `/app/coach`) with `Insights` (BarChart3 icon → `/app/insights`) to match design spec §1.2 — Coach remains accessible from Dashboard AI Coach card and Settings Quick Links
+- **Acceptance criteria verified**: Settings covers all account/data features (profile, units, sync, export, import, logout, delete) ✓; `tsc --noEmit` exits 0; no linter errors
+
+---
+
 ## Deferred Features Log
 
 Features intentionally skipped during active development. Each entry records what was deferred, why, and when to reconsider.
