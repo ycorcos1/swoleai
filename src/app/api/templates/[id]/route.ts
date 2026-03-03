@@ -375,3 +375,31 @@ export async function PUT(
 
   return NextResponse.json({ template });
 }
+
+// =============================================================================
+// DELETE /api/templates/[id] — Delete a template
+// =============================================================================
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth();
+  if (!auth.success) return auth.response;
+  const { userId } = auth;
+
+  const { id } = await params;
+
+  const existing = await prisma.workoutDayTemplate.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+  }
+
+  await prisma.workoutDayTemplate.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
+}

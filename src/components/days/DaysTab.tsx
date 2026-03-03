@@ -23,6 +23,7 @@ import {
   Clock,
   Dumbbell,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import {
@@ -379,9 +380,12 @@ function TemplateDetailsStep({ mode, onBack, onSuccess, onCancel }: TemplateDeta
 interface TemplateCardProps {
   template: Template;
   onEdit: (template: Template) => void;
+  onDelete: (id: string) => void;
+  deleting: boolean;
 }
 
-function TemplateCard({ template, onEdit }: TemplateCardProps) {
+function TemplateCard({ template, onEdit, onDelete, deleting }: TemplateCardProps) {
+  const [confirming, setConfirming] = useState(false);
   const isFixed = template.mode === 'FIXED';
   const itemCount = isFixed ? template.blocks.length : template.slots.length;
   const itemLabel = isFixed
@@ -438,22 +442,62 @@ function TemplateCard({ template, onEdit }: TemplateCardProps) {
           )}
         </div>
 
-        {/* Edit button — FIXED (Task 6.6) and SLOT (Task 6.7) templates */}
-        <button
-          type="button"
-          onClick={() => onEdit(template)}
-          aria-label={`Edit ${template.name}`}
-          className={[
-            'flex-shrink-0 p-2 rounded-[var(--radius-sm)] transition-colors',
-            'text-[var(--color-text-muted)]',
-            isFixed
-              ? 'hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)]'
-              : 'hover:text-[var(--color-accent-blue)] hover:bg-[rgba(59,130,246,0.10)]',
-          ].join(' ')}
-        >
-          <Pencil className="h-4 w-4" />
-        </button>
+        {/* Action buttons */}
+        <div className="flex flex-row gap-1 flex-shrink-0">
+          {/* Edit button */}
+          <button
+            type="button"
+            onClick={() => onEdit(template)}
+            aria-label={`Edit ${template.name}`}
+            className={[
+              'flex-shrink-0 p-2 rounded-[var(--radius-sm)] transition-colors',
+              'text-[var(--color-text-muted)]',
+              isFixed
+                ? 'hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)]'
+                : 'hover:text-[var(--color-accent-blue)] hover:bg-[rgba(59,130,246,0.10)]',
+            ].join(' ')}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+
+          {/* Delete button */}
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            disabled={deleting}
+            aria-label={`Delete ${template.name}`}
+            className="flex-shrink-0 p-2 rounded-[var(--radius-sm)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[rgba(239,68,68,0.10)] disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
+
+      {/* Inline delete confirmation */}
+      {confirming && (
+        <div className="mt-3 pt-3 border-t border-[var(--glass-border)]">
+          <p className="text-sm text-[var(--color-text-secondary)] mb-2.5">
+            Delete <span className="font-semibold text-[var(--color-text-primary)]">{template.name}</span>? This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setConfirming(false); onDelete(template.id); }}
+              disabled={deleting}
+              className="btn-primary text-xs py-1.5 px-4 flex-1 disabled:opacity-60 !bg-[var(--color-error)] !border-[var(--color-error)] hover:!bg-[rgba(239,68,68,0.85)]"
+            >
+              {deleting ? 'Deleting…' : 'Yes, Delete'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="btn-secondary text-xs py-1.5 px-4"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </GlassCard>
   );
 }
@@ -475,6 +519,7 @@ export function DaysTab() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [wizard, setWizard] = useState<WizardState>(null);
   const [viewState, setViewState] = useState<ViewState>({ view: 'list' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -531,6 +576,19 @@ export function DaysTab() {
   /** Called when the user clicks ← in either editor */
   function handleEditorBack() {
     setViewState({ view: 'list' });
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch {
+      // silently stay in list — could add a toast here
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   // ── Fixed template editor view ─────────────────────────────────────────────
@@ -632,6 +690,8 @@ export function DaysTab() {
               key={template.id}
               template={template}
               onEdit={handleEditTemplate}
+              onDelete={handleDelete}
+              deleting={deletingId === template.id}
             />
           ))}
 

@@ -166,6 +166,9 @@ model User {
   // Relations (Task 2.8)
   coachProposals CoachProposal[] // AI coach proposals for the user
 
+  // Personal records
+  personalRecords PersonalRecord[]
+
   @@map("users")
 }
 
@@ -213,6 +216,9 @@ model Exercise {
 
   // Relations (Task 2.6)
   workoutExercises WorkoutExercise[] // Exercise instances in workout sessions
+
+  // Personal records
+  personalRecords PersonalRecord[]
 
   // Index for efficient lookups of user's custom exercises
   @@index([ownerUserId, isCustom])
@@ -702,6 +708,40 @@ model RoutineChangeLog {
   @@index([toVersionId])
   @@index([proposalId])
   @@map("routine_change_logs")
+}
+
+// =============================================================================
+// PERSONAL RECORDS
+// =============================================================================
+
+// PersonalRecord model
+// Stores the user's manually logged best performance for an exercise
+// Used by AI to offer progression advice and detect plateaus
+model PersonalRecord {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Owner
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Exercise this PR belongs to
+  exerciseId String   @map("exercise_id")
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  // PR values
+  weight Float   // Weight in user's preferred unit
+  reps   Int     // Reps performed at that weight
+  notes  String? // Optional context (e.g., "paused reps", "belt")
+
+  // Date the PR was set (defaults to now, user can back-date)
+  achievedAt DateTime @default(now()) @map("achieved_at")
+
+  // One PR record per user per exercise
+  @@unique([userId, exerciseId])
+  @@index([userId])
+  @@map("personal_records")
 }
 
 // =============================================================================

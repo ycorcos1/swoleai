@@ -64,7 +64,16 @@ export async function POST() {
   const { userId } = auth;
 
   // 1. Build training summary
-  const summary = await buildTrainingSummary(userId);
+  let summary;
+  try {
+    summary = await buildTrainingSummary(userId);
+  } catch (err) {
+    console.error('[coach/next-session] DB error building summary:', err);
+    return NextResponse.json(
+      { error: 'Database error', message: 'Failed to load training data. Please try again.' },
+      { status: 503 }
+    );
+  }
   const inputHash = hashSummary(summary);
 
   // 2. Check for cached PENDING proposal with same input hash

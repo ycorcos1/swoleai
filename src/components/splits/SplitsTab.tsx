@@ -15,7 +15,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutGrid, Plus, X, CheckCircle2, CalendarDays, Zap } from 'lucide-react';
+import { LayoutGrid, Plus, X, CheckCircle2, CalendarDays, Zap, Trash2 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -69,6 +69,26 @@ const WEEKDAY_LONG: Record<WeekdayKey, string> = {
   SUN: 'Sunday',
 };
 
+const WEEKDAY_ENUM: Record<WeekdayKey, string> = {
+  MON: 'MONDAY',
+  TUE: 'TUESDAY',
+  WED: 'WEDNESDAY',
+  THU: 'THURSDAY',
+  FRI: 'FRIDAY',
+  SAT: 'SATURDAY',
+  SUN: 'SUNDAY',
+};
+
+const WEEKDAY_FROM_ENUM: Record<string, WeekdayKey> = {
+  MONDAY: 'MON',
+  TUESDAY: 'TUE',
+  WEDNESDAY: 'WED',
+  THURSDAY: 'THU',
+  FRIDAY: 'FRI',
+  SATURDAY: 'SAT',
+  SUNDAY: 'SUN',
+};
+
 // ── SplitCard ─────────────────────────────────────────────────────────────────
 
 interface SplitCardProps {
@@ -76,10 +96,13 @@ interface SplitCardProps {
   onEditSchedule: () => void;
   onActivate: () => void;
   activating: boolean;
+  onDelete: (id: string) => void;
+  deleting: boolean;
 }
 
-function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardProps) {
+function SplitCard({ split, onEditSchedule, onActivate, activating, onDelete, deleting }: SplitCardProps) {
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const dayCount = split.scheduleDays.filter((d) => !d.isRest).length;
   const restCount = split.scheduleDays.filter((d) => d.isRest).length;
 
@@ -113,7 +136,9 @@ function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardP
           {split.scheduleDays.length > 0 ? (
             <div className="flex gap-1 mt-2 flex-wrap">
               {WEEKDAYS.map((wd) => {
-                const day = split.scheduleDays.find((d) => d.weekday === wd);
+                const day = split.scheduleDays.find(
+                  (d) => d.weekday === wd || d.weekday === WEEKDAY_ENUM[wd]
+                );
                 if (!day) return null;
                 return (
                   <span
@@ -151,24 +176,6 @@ function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardP
 
         {/* Action buttons */}
         <div className="flex flex-col gap-1.5 flex-shrink-0">
-          {/* Edit schedule button */}
-          <button
-            type="button"
-            onClick={onEditSchedule}
-            aria-label={`Edit schedule for ${split.name}`}
-            title="Edit schedule"
-            className={[
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm)]',
-              'text-xs font-medium transition-colors',
-              'text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)]',
-              'bg-[var(--color-base-600)] hover:bg-[rgba(139,92,246,0.12)]',
-              'border border-transparent hover:border-[rgba(139,92,246,0.25)]',
-            ].join(' ')}
-          >
-            <CalendarDays className="h-3.5 w-3.5" />
-            Schedule
-          </button>
-
           {/* Activate button — only shown for inactive splits */}
           {!split.isActive && (
             <button
@@ -190,10 +197,35 @@ function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardP
               Activate
             </button>
           )}
+
+          <div className="flex flex-row gap-1">
+            {/* Edit schedule button */}
+            <button
+              type="button"
+              onClick={onEditSchedule}
+              aria-label={`Edit schedule for ${split.name}`}
+              title="Edit schedule"
+              className="p-2 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.12)] transition-colors"
+            >
+              <CalendarDays className="h-4 w-4" />
+            </button>
+
+            {/* Delete button */}
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={deleting}
+              aria-label={`Delete split ${split.name}`}
+              title="Delete split"
+              className="p-2 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[rgba(239,68,68,0.10)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Inline confirmation prompt */}
+      {/* Inline activate confirmation prompt */}
       {confirming && (
         <div className="mt-3 pt-3 border-t border-[var(--glass-border)]">
           <p className="text-sm text-[var(--color-text-secondary)] mb-2.5">
@@ -211,6 +243,32 @@ function SplitCard({ split, onEditSchedule, onActivate, activating }: SplitCardP
             <button
               type="button"
               onClick={handleCancel}
+              className="btn-secondary text-xs py-1.5 px-4"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Inline delete confirmation prompt */}
+      {confirmingDelete && (
+        <div className="mt-3 pt-3 border-t border-[var(--glass-border)]">
+          <p className="text-sm text-[var(--color-text-secondary)] mb-2.5">
+            Delete <span className="font-semibold text-[var(--color-text-primary)]">{split.name}</span>? This cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setConfirmingDelete(false); onDelete(split.id); }}
+              disabled={deleting}
+              className="btn-primary text-xs py-1.5 px-4 flex-1 disabled:opacity-60 !bg-[var(--color-error)] !border-[var(--color-error)] hover:!bg-[rgba(239,68,68,0.85)]"
+            >
+              {deleting ? 'Deleting…' : 'Yes, Delete'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
               className="btn-secondary text-xs py-1.5 px-4"
             >
               Cancel
@@ -249,7 +307,7 @@ function ScheduleEditor({ split, onSave, onCancel }: ScheduleEditorProps) {
       SUN: { isRest: true, label: '', workoutDayTemplateId: null },
     };
     for (const day of split.scheduleDays) {
-      const wd = day.weekday as WeekdayKey;
+      const wd = (WEEKDAY_FROM_ENUM[day.weekday] ?? day.weekday) as WeekdayKey;
       if (wd in defaults) {
         defaults[wd] = {
           isRest: day.isRest,
@@ -308,7 +366,7 @@ function ScheduleEditor({ split, onSave, onCancel }: ScheduleEditorProps) {
     setError(null);
 
     const scheduleDays = WEEKDAYS.map((weekday) => ({
-      weekday,
+      weekday: WEEKDAY_ENUM[weekday],
       isRest: days[weekday].isRest,
       label: days[weekday].isRest ? null : (days[weekday].label.trim() || null),
       workoutDayTemplateId: days[weekday].isRest
@@ -650,6 +708,7 @@ export function SplitsTab() {
   /** ID of the split currently being activated (null = none in flight) */
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchSplits = useCallback(async () => {
     setLoading(true);
@@ -712,6 +771,19 @@ export function SplitsTab() {
       setActivateError(err instanceof Error ? err.message : 'Could not activate split');
     } finally {
       setActivatingId(null);
+    }
+  }
+
+  async function handleDelete(splitId: string) {
+    setDeletingId(splitId);
+    try {
+      const res = await fetch(`/api/splits/${splitId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      setSplits((prev) => prev.filter((s) => s.id !== splitId));
+    } catch {
+      // silently stay in list — could add a toast here
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -806,6 +878,8 @@ export function SplitsTab() {
                 }}
                 onActivate={() => handleActivate(split.id)}
                 activating={activatingId === split.id}
+                onDelete={handleDelete}
+                deleting={deletingId === split.id}
               />
             )
           )}

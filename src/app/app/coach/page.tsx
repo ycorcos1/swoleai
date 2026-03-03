@@ -10,8 +10,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { Bot, ChevronRight, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { AIRoutineWizard } from '@/components/coach/AIRoutineWizard';
 
 // =============================================================================
 // Types
@@ -84,6 +85,7 @@ export default function CoachInboxPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<ProposalType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showRoutineWizard, setShowRoutineWizard] = useState(false);
 
   const fetchProposals = useCallback(async () => {
     setLoading(true);
@@ -143,6 +145,21 @@ export default function CoachInboxPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
+        {/* Create Routine with AI */}
+        <button
+          onClick={() => setShowRoutineWizard(true)}
+          className="w-full flex items-center gap-3 rounded-2xl border border-dashed border-[var(--color-accent-purple)]/40 bg-purple-500/5 hover:bg-purple-500/10 hover:border-[var(--color-accent-purple)]/60 px-4 py-3.5 transition-all group"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(139,92,246,0.15)' }}>
+            <Sparkles className="h-4.5 w-4.5 text-[var(--color-accent-purple)]" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-semibold text-[var(--color-text-primary)]">Create New Routine</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Answer a few questions — AI builds your split</p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[var(--color-accent-purple)] opacity-60 group-hover:opacity-100 transition-opacity" />
+        </button>
+
         {/* Generate actions */}
         <GlassCard>
           <h2 className="text-sm font-semibold text-[var(--color-text-muted)] uppercase tracking-wide mb-3">
@@ -251,6 +268,11 @@ export default function CoachInboxPage() {
           </div>
         )}
       </div>
+
+      {/* AI Routine Wizard modal */}
+      {showRoutineWizard && (
+        <AIRoutineWizard onClose={() => setShowRoutineWizard(false)} />
+      )}
     </div>
   );
 }

@@ -65,7 +65,16 @@ export async function POST() {
   if (!auth.success) return auth.response;
   const { userId } = auth;
 
-  const summary = await buildTrainingSummary(userId);
+  let summary;
+  try {
+    summary = await buildTrainingSummary(userId);
+  } catch (err) {
+    console.error('[coach/goals] DB error building summary:', err);
+    return NextResponse.json(
+      { error: 'Database error', message: 'Failed to load training data. Please try again.' },
+      { status: 503 }
+    );
+  }
   const inputHash = hashSummary(summary);
 
   // Cache check

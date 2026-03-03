@@ -8,13 +8,12 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutGrid, CalendarDays, Star, GitBranch } from 'lucide-react';
+import { LayoutGrid, CalendarDays, Trophy } from 'lucide-react';
 import { SplitsTab } from '@/components/splits/SplitsTab';
 import { DaysTab } from '@/components/days/DaysTab';
-import { FavoritesTab } from '@/components/favorites/FavoritesTab';
-import { VersionsTab } from '@/components/versions/VersionsTab';
+import { WorkoutsTab } from '@/components/workouts/WorkoutsTab';
 
-type Tab = 'splits' | 'days' | 'favorites' | 'versions';
+type Tab = 'splits' | 'days' | 'workouts';
 
 interface TabConfig {
   id: Tab;
@@ -23,19 +22,15 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: 'splits',    label: 'Splits',    Icon: LayoutGrid  },
-  { id: 'days',      label: 'Days',      Icon: CalendarDays },
-  { id: 'favorites', label: 'Favorites', Icon: Star         },
-  { id: 'versions',  label: 'Versions',  Icon: GitBranch    },
+  { id: 'splits',   label: 'Splits',   Icon: LayoutGrid  },
+  { id: 'days',     label: 'Days',     Icon: CalendarDays },
+  { id: 'workouts', label: 'Workouts', Icon: Trophy       },
 ];
 
-
-
 const TAB_CONTENT: Record<Tab, React.ReactNode> = {
-  splits:    <SplitsTab />,
-  days:      <DaysTab />,
-  favorites: <FavoritesTab />,
-  versions:  <VersionsTab />,
+  splits:   <SplitsTab />,
+  days:     <DaysTab />,
+  workouts: <WorkoutsTab />,
 };
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -48,9 +43,6 @@ export default function RoutinePage() {
       {/* Page header */}
       <header className="px-4 pt-6 pb-4">
         <h1 className="text-2xl font-bold">Routine Studio</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
-          Splits, days, favorites &amp; versions
-        </p>
       </header>
 
       {/* Tab bar */}
