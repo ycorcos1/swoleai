@@ -34,6 +34,15 @@ export interface ExerciseSummary {
   prReps: number;
 }
 
+export interface FavoriteSummary {
+  exerciseId: string;
+  exerciseName: string;
+  muscleGroups: string[];
+  priority: 'PRIMARY' | 'BACKUP';
+  /** coaching intent derived from tags: 'progression' | 'hypertrophy' | 'auto' */
+  intent: 'progression' | 'hypertrophy' | 'auto';
+}
+
 export interface SessionAggregate {
   weekLabel: string; // e.g. "2026-W08"
   sessionCount: number;
@@ -75,6 +84,10 @@ export interface TrainingSummary {
     avgRpe: number | null;
     message: string;
   }[];
+  /** User's favorited exercises with priority and coaching intent */
+  favorites: FavoriteSummary[];
+  /** Last 4 completed sessions — exercise names only, for repetition avoidance */
+  recentSessionHistory: { date: string; exercises: string[] }[];
 }
 
 // =============================================================================
@@ -322,6 +335,53 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
     message: p.message,
   }));
 
+  // 8. User favorites with coaching intent
+  const rawFavorites = await prisma.favorite.findMany({
+    where: { userId },
+    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+    select: {
+      priority: true,
+      tags: true,
+      exercise: {
+        select: { id: true, name: true, muscleGroups: true },
+      },
+    },
+  });
+
+  const favorites: FavoriteSummary[] = rawFavorites.map((f) => {
+    const tags = f.tags as string[];
+    const intent: FavoriteSummary['intent'] = tags.includes('progression')
+      ? 'progression'
+      : tags.includes('hypertrophy')
+      ? 'hypertrophy'
+      : 'auto';
+    return {
+      exerciseId: f.exercise.id,
+      exerciseName: f.exercise.name,
+      muscleGroups: f.exercise.muscleGroups as string[],
+      priority: f.priority as 'PRIMARY' | 'BACKUP',
+      intent,
+    };
+  });
+
+  // 9. Recent session exercise history (last 4 sessions) for repetition avoidance
+  const last4Sessions = await prisma.workoutSession.findMany({
+    where: { userId, status: 'COMPLETED' },
+    orderBy: { startedAt: 'desc' },
+    take: 4,
+    select: {
+      startedAt: true,
+      exercises: {
+        select: { exercise: { select: { name: true } } },
+      },
+    },
+  });
+
+  const recentSessionHistory = last4Sessions.map((s) => ({
+    date: s.startedAt.toISOString().split('T')[0],
+    exercises: s.exercises.map((e) => e.exercise.name),
+  }));
+
   return {
     generatedAt: new Date().toISOString(),
     user: {
@@ -359,6 +419,8 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
     weeklyAggregates,
     exerciseSummaries,
     plateauCandidates,
+    favorites,
+    recentSessionHistory,
   };
 }
 

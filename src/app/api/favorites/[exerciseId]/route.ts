@@ -16,9 +16,12 @@ const toggleFavoriteSchema = z.object({
   tags: z.array(z.string()).optional().default([]),
 }).optional();
 
-// Schema for PATCH body — update priority of an existing favorite
+// Schema for PATCH body — update priority and/or tags of an existing favorite
 const updatePrioritySchema = z.object({
-  priority: z.nativeEnum(FavoritePriority),
+  priority: z.nativeEnum(FavoritePriority).optional(),
+  tags: z.array(z.string()).optional(),
+}).refine((d) => d.priority !== undefined || d.tags !== undefined, {
+  message: 'At least one of priority or tags must be provided',
 });
 
 // Schema for exerciseId param validation
@@ -203,10 +206,14 @@ export async function PATCH(
     );
   }
 
-  // Update the priority
+  // Update the priority and/or tags
+  const updateData: { priority?: typeof body.priority; tags?: string[] } = {};
+  if (body.priority !== undefined) updateData.priority = body.priority;
+  if (body.tags !== undefined) updateData.tags = body.tags;
+
   const updated = await prisma.favorite.update({
     where: { id: existing.id },
-    data: { priority: body.priority },
+    data: updateData,
     select: {
       id: true,
       priority: true,
@@ -218,6 +225,6 @@ export async function PATCH(
   return NextResponse.json({
     favorite: updated,
     exerciseId,
-    message: `Priority updated to ${body.priority}`,
+    message: 'Favorite updated',
   });
 }

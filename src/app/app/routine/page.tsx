@@ -8,12 +8,13 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutGrid, CalendarDays, Trophy } from 'lucide-react';
+import { LayoutGrid, CalendarDays, Star, Trophy } from 'lucide-react';
 import { SplitsTab } from '@/components/splits/SplitsTab';
 import { DaysTab } from '@/components/days/DaysTab';
+import { FavoritesTab } from '@/components/favorites/FavoritesTab';
 import { WorkoutsTab } from '@/components/workouts/WorkoutsTab';
 
-type Tab = 'splits' | 'days' | 'workouts';
+type Tab = 'splits' | 'days' | 'favorites' | 'prs';
 
 interface TabConfig {
   id: Tab;
@@ -22,15 +23,17 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: 'splits',   label: 'Splits',   Icon: LayoutGrid  },
-  { id: 'days',     label: 'Days',     Icon: CalendarDays },
-  { id: 'workouts', label: 'Workouts', Icon: Trophy       },
+  { id: 'splits',    label: 'Splits',    Icon: LayoutGrid  },
+  { id: 'days',      label: 'Days',      Icon: CalendarDays },
+  { id: 'favorites', label: 'Favorites', Icon: Star         },
+  { id: 'prs',       label: 'PRs',       Icon: Trophy       },
 ];
 
 const TAB_CONTENT: Record<Tab, React.ReactNode> = {
-  splits:   <SplitsTab />,
-  days:     <DaysTab />,
-  workouts: <WorkoutsTab />,
+  splits:    <SplitsTab />,
+  days:      <DaysTab />,
+  favorites: <FavoritesTab />,
+  prs:       <WorkoutsTab />,
 };
 
 // ── Page ─────────────────────────────────────────────────────────────────────
