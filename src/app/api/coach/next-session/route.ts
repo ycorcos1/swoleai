@@ -26,49 +26,66 @@ import { openai, COACH_MODEL } from '@/lib/coach/openai';
 // =============================================================================
 
 const SYSTEM_PROMPT = `You are SwoleAI, an expert strength and hypertrophy coach.
-Your task is to plan the user's NEXT training session based on their training summary.
+Your task is to plan the user's training session for TODAY based on their active split schedule.
 
-## Exercise selection rules
-1. **Favorites first**: The summary includes a "favorites" list per muscle group with a priority (PRIMARY or BACKUP) and an intent (progression | hypertrophy | auto).
-   - When planning a muscle group, always prefer PRIMARY favorites first, then BACKUP favorites.
-   - If the session requires more exercises for a muscle group than the user has favorited, fill the remaining slots with exercises from their history or routine.
-   - If the user has no favorites at all for a muscle group, choose appropriate exercises from their routine or history.
+## Step 1 — Identify today's session
+The training summary includes a "today" field with the current weekday and the matching schedule entry.
+- If today is a rest day (isRest: true), respond with sessionTitle "Rest Day", an empty exercises array, and a short note.
+- Otherwise, use today.scheduleDay.templateName to identify which day template to execute.
+- Find that template in "currentTemplates" by name, then use ALL its exercises as the basis for the session.
 
-2. **Avoid repetition**: The summary includes "recentSessionHistory" (last 4 sessions with exercise names).
-   - Do NOT repeat the same exercise that was used in the MOST RECENT session for the same muscle group.
-   - Rotate through different exercises across sessions to ensure variety and balanced stimulus.
+## Step 2 — Understand the split type
+Common split patterns and their muscle groups per day:
+- **PPL (Push/Pull/Legs)**: Push = chest, front delts, side delts, triceps | Pull = back (lats, mid back), rear delts, biceps | Legs = quads, hamstrings, glutes, calves
+- **Upper/Lower**: Upper = chest, back, shoulders, biceps, triceps | Lower = quads, hamstrings, glutes, calves, abs
+- **Arnold Split (6-day)**: Chest+Back | Shoulders+Arms | Legs (repeated twice)
+- **Full Body**: all major muscle groups each session
+- **Bro Split**: one muscle group per day (Chest day, Back day, Leg day, Shoulder day, Arms day)
+Use the split name and today's template label to understand which muscles to focus on.
+
+## Step 3 — Build the full session
+- Start with ALL exercises in the template for today. Do NOT omit any template exercises.
+- Use the exact exerciseId values from the template (provided in currentTemplates.exercises[].exerciseId).
+- You may add 1–2 additional exercises if needed to cover a muscle group adequately or if session_minutes allows.
+- Follow the template's setsPlanned / repMin / repMax as the default, adjusting based on intent (see below).
+
+## Step 4 — Exercise selection rules
+1. **Favorites first**: The summary includes a "favorites" list per muscle group with priority (PRIMARY or BACKUP) and intent (progression | hypertrophy | auto).
+   - For any additional exercises beyond the template, prefer PRIMARY favorites, then BACKUP favorites.
+   - If the user has no favorites for a muscle group, choose appropriate exercises from their history.
+
+2. **Avoid repetition**: "recentSessionHistory" lists the last 4 sessions' exercises.
+   - Do NOT repeat an exercise used in the MOST RECENT session for the same muscle group if alternatives exist.
 
 3. **Coaching intent per exercise**:
-   - **progression**: Apply progressive overload. If the user's top set last time was X kg × Y reps, suggest X kg × (Y+1) reps OR (X + small increment) kg × Y reps. Always fill progressionNote with the specific target.
-   - **hypertrophy**: Focus on the 10–15 rep range with controlled tempo. Do NOT push weight increases — instead recommend maintaining weight and maximizing the mind-muscle connection. Note this in progressionNote.
-   - **auto**: Use the user's goal mode. For STRENGTH, apply progression. For HYPERTROPHY, use the hypertrophy rules above. For HYBRID, alternate between the two based on the exercise type (compounds → progression, isolation → hypertrophy).
+   - **progression**: Apply progressive overload. If the user's last top set was X kg × Y reps, suggest X kg × (Y+1) OR (X + small increment) × Y reps. Fill progressionNote with the specific target.
+   - **hypertrophy**: Focus on 10–15 rep range, controlled tempo. Do NOT push weight increases — maintain weight and maximize mind-muscle connection. Note this in progressionNote.
+   - **auto**: For STRENGTH goal → apply progression. For HYPERTROPHY goal → use hypertrophy rules. For HYBRID → compounds get progression, isolation gets hypertrophy.
 
-4. **Isolation vs compound awareness** (applies when intent is "auto"):
-   - Compound lifts (bench press, squat, deadlift, overhead press, row, pull-up, etc.) → apply progression.
-   - Isolation movements (flyes, curls, lateral raises, tricep pushdowns, leg curls, etc.) → apply hypertrophy rules, not progression.
+4. **Isolation vs compound** (for "auto" intent):
+   - Compounds (bench press, squat, deadlift, overhead press, row, pull-up, etc.) → progression.
+   - Isolation (flyes, curls, lateral raises, tricep pushdowns, leg curls, leg extensions, etc.) → hypertrophy.
 
-5. Only select exercises the user has performed, favorited, or that are in their routine templates.
-6. Respect the user's equipment access, constraints, and session_minutes budget.
-7. Do not train the same muscle groups that were trained in the most recent session (avoid consecutive same-muscle days).
+5. Respect the user's equipment access, session_minutes budget, and any constraints.
+6. Do not train the same muscle groups trained in the MOST RECENT completed session.
 
 ## Output
-Return ONLY valid JSON matching the schema. No markdown, no prose outside JSON.
+Return ONLY valid JSON matching this schema. No markdown, no prose outside JSON.
 
-Schema:
 {
-  "sessionTitle": "string (e.g. Push Day A)",
+  "sessionTitle": "string (e.g. 'Legs & Abs — Wednesday')",
   "exercises": [
     {
-      "exerciseId": "string (exact id from summary)",
+      "exerciseId": "string (exact id from summary — must exist in currentTemplates or favorites)",
       "exerciseName": "string",
       "sets": integer,
       "repMin": integer,
       "repMax": integer,
       "restSeconds": integer,
-      "progressionNote": "optional string — specific coaching cue (e.g. 'Aim for 85kg × 5, up from 82.5kg last session' or 'Keep at 15kg, focus on full stretch')"
+      "progressionNote": "optional string — specific coaching cue"
     }
   ],
-  "notes": "optional string (overall session coaching notes)",
+  "notes": "optional string (overall session coaching note, 1–2 sentences)",
   "estimatedMinutes": optional integer
 }`;
 
@@ -105,7 +122,29 @@ export async function POST() {
   }
 
   // 3. Call OpenAI
-  const userMessage = `Training summary:\n${JSON.stringify(summary, null, 2)}\n\nPlan my next session.`;
+  // Build a focused preamble so the AI immediately knows what day it is and what template to use
+  const todayInfo = summary.today;
+  const todayTemplate = todayInfo.scheduleDay?.templateId
+    ? summary.currentTemplates.find((t) => t.id === todayInfo.scheduleDay!.templateId)
+    : null;
+
+  const todayPreamble = todayInfo.scheduleDay
+    ? todayInfo.scheduleDay.isRest
+      ? `TODAY (${todayInfo.weekday}) is a REST DAY. Do not plan a workout.`
+      : `TODAY is ${todayInfo.weekday}. Today's session is: "${todayInfo.scheduleDay.templateName ?? todayInfo.scheduleDay.label ?? 'Workout'}".
+${todayTemplate
+  ? `Template exercises for today (use these exerciseIds in your response):
+${todayTemplate.exercises.map((e, i) => `  ${i + 1}. ${e.exerciseName} (id: ${e.exerciseId}) — ${e.setsPlanned} sets × ${e.repMin}–${e.repMax} reps`).join('\n')}`
+  : 'No template found for today — plan based on the split name and muscle groups.'
+}`
+    : `TODAY is ${todayInfo.weekday}. No active split schedule found — plan a balanced session based on recent history.`;
+
+  const userMessage = `${todayPreamble}
+
+Full training summary:
+${JSON.stringify(summary, null, 2)}
+
+Plan today's complete session.`;
 
   let rawContent: string;
   try {

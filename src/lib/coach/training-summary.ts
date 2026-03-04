@@ -53,6 +53,16 @@ export interface SessionAggregate {
 
 export interface TrainingSummary {
   generatedAt: string;
+  /** Today's weekday (e.g. "WEDNESDAY") and the matching schedule entry, if any */
+  today: {
+    weekday: string;
+    scheduleDay: {
+      label: string | null;
+      templateId: string | null;
+      templateName: string | null;
+      isRest: boolean;
+    } | null;
+  };
   user: {
     goalMode: string | null;
     daysPerWeek: number | null;
@@ -70,7 +80,7 @@ export interface TrainingSummary {
     id: string;
     name: string;
     mode: string;
-    exercises: { orderIndex: number; exerciseName: string; setsPlanned: number; repMin: number; repMax: number }[];
+    exercises: { orderIndex: number; exerciseId: string; exerciseName: string; setsPlanned: number; repMin: number; repMax: number }[];
   }[];
   weeklyAggregates: SessionAggregate[];
   exerciseSummaries: ExerciseSummary[];
@@ -112,6 +122,10 @@ function isoWeekLabel(date: Date): string {
 // =============================================================================
 
 export async function buildTrainingSummary(userId: string): Promise<TrainingSummary> {
+  // 0. Determine today's weekday (matches Prisma Weekday enum)
+  const WEEKDAY_NAMES = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
+  const todayWeekday = WEEKDAY_NAMES[new Date().getDay()];
+
   // 1. User profile
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
@@ -166,6 +180,7 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
               setsPlanned: true,
               repMin: true,
               repMax: true,
+              exerciseId: true,
               exercise: { select: { name: true } },
             },
           },
@@ -384,6 +399,20 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
 
   return {
     generatedAt: new Date().toISOString(),
+    today: (() => {
+      const todayEntry = activeSplit?.scheduleDays.find((d) => d.weekday === todayWeekday) ?? null;
+      return {
+        weekday: todayWeekday,
+        scheduleDay: todayEntry
+          ? {
+              label: todayEntry.label,
+              templateId: todayEntry.workoutDayTemplate?.id ?? null,
+              templateName: todayEntry.workoutDayTemplate?.name ?? null,
+              isRest: todayEntry.isRest,
+            }
+          : null,
+      };
+    })(),
     user: {
       goalMode: user.goalMode,
       daysPerWeek: user.daysPerWeek,
@@ -410,6 +439,7 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
       mode: t.mode,
       exercises: t.blocks.map((b) => ({
         orderIndex: b.orderIndex,
+        exerciseId: b.exerciseId,
         exerciseName: b.exercise.name,
         setsPlanned: b.setsPlanned,
         repMin: b.repMin,
@@ -429,9 +459,9 @@ export async function buildTrainingSummary(userId: string): Promise<TrainingSumm
 // =============================================================================
 
 export function hashSummary(summary: TrainingSummary): string {
-  // Simple deterministic hash: stringify key fields
   const payload = JSON.stringify({
     g: summary.generatedAt.slice(0, 10), // day-level granularity
+    d: summary.today.weekday,            // include today's day so cache varies per day
     s: summary.activeSplit?.id,
     p: summary.plateauCandidates.map((p) => p.exerciseId).sort(),
     w: summary.weeklyAggregates.map((w) => w.weekLabel),

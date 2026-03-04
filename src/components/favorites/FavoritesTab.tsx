@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Star, Trash2, Plus, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash2, Plus, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -35,35 +35,98 @@ interface Exercise {
   isCustom: boolean;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// ── Muscle group + subgroup definitions ───────────────────────────────────────
 
-const MUSCLE_GROUP_OPTIONS = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'forearms', 'quads', 'hamstrings', 'glutes', 'calves',
-  'abs', 'traps', 'lats', 'rear_delts',
+interface SubGroup {
+  key: string;
+  label: string;
+}
+
+interface MuscleGroupDef {
+  key: string;
+  label: string;
+  subGroups: SubGroup[];
+}
+
+const MUSCLE_GROUPS: MuscleGroupDef[] = [
+  {
+    key: 'chest',
+    label: 'Chest',
+    subGroups: [
+      { key: 'upper_chest', label: 'Upper Chest' },
+      { key: 'mid_chest',   label: 'Mid Chest' },
+      { key: 'lower_chest', label: 'Lower Chest' },
+    ],
+  },
+  {
+    key: 'back',
+    label: 'Back',
+    subGroups: [
+      { key: 'lats',        label: 'Lats' },
+      { key: 'mid_back',    label: 'Mid Back' },
+      { key: 'lower_back',  label: 'Lower Back' },
+      { key: 'traps',       label: 'Traps' },
+    ],
+  },
+  {
+    key: 'shoulders',
+    label: 'Shoulders',
+    subGroups: [
+      { key: 'front_delts', label: 'Front Delts' },
+      { key: 'side_delts',  label: 'Side Delts' },
+      { key: 'rear_delts',  label: 'Rear Delts' },
+    ],
+  },
+  {
+    key: 'biceps',
+    label: 'Biceps',
+    subGroups: [
+      { key: 'short_head_bicep', label: 'Short Head' },
+      { key: 'long_head_bicep',  label: 'Long Head' },
+      { key: 'brachialis',       label: 'Brachialis' },
+    ],
+  },
+  {
+    key: 'triceps',
+    label: 'Triceps',
+    subGroups: [
+      { key: 'long_head_tricep',    label: 'Long Head' },
+      { key: 'lateral_head_tricep', label: 'Lateral Head' },
+      { key: 'medial_head_tricep',  label: 'Medial Head' },
+    ],
+  },
+  {
+    key: 'legs',
+    label: 'Legs',
+    subGroups: [
+      { key: 'quads',       label: 'Quads' },
+      { key: 'hamstrings',  label: 'Hamstrings' },
+      { key: 'glutes',      label: 'Glutes' },
+      { key: 'calves',      label: 'Calves' },
+      { key: 'hip_flexors', label: 'Hip Flexors' },
+    ],
+  },
+  {
+    key: 'abs',
+    label: 'Abs',
+    subGroups: [
+      { key: 'upper_abs', label: 'Upper Abs' },
+      { key: 'lower_abs', label: 'Lower Abs' },
+      { key: 'obliques',  label: 'Obliques' },
+    ],
+  },
 ];
 
-// Canonical display groups always shown in the accordion
-const CANONICAL_GROUPS = [
-  { key: 'chest',     label: 'Chest' },
-  { key: 'back',      label: 'Back' },
-  { key: 'shoulders', label: 'Shoulders' },
-  { key: 'biceps',    label: 'Biceps' },
-  { key: 'triceps',   label: 'Triceps' },
-  { key: 'legs',      label: 'Legs' },
-  { key: 'abs',       label: 'Abs' },
-];
-
-// Maps exercise muscleGroup values → canonical group key
-const MUSCLE_TO_CANONICAL: Record<string, string> = {
-  chest: 'chest',
-  back: 'back', lats: 'back', traps: 'back',
-  shoulders: 'shoulders', rear_delts: 'shoulders',
-  biceps: 'biceps', forearms: 'biceps',
-  triceps: 'triceps',
-  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
-  abs: 'abs',
-};
+// Flat lookup: any subgroup key or group key → canonical group key
+const MUSCLE_TO_CANONICAL: Record<string, string> = {};
+for (const group of MUSCLE_GROUPS) {
+  MUSCLE_TO_CANONICAL[group.key] = group.key;
+  for (const sub of group.subGroups) {
+    MUSCLE_TO_CANONICAL[sub.key] = group.key;
+  }
+}
+// Legacy flat names
+MUSCLE_TO_CANONICAL['forearms'] = 'biceps';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -76,8 +139,24 @@ function formatLabel(s: string): string {
 
 function primaryMuscle(groups: string[]): string {
   if (groups.length === 0) return 'other';
-  const canonical = MUSCLE_TO_CANONICAL[groups[0].toLowerCase()];
-  return canonical ?? groups[0];
+  for (const g of groups) {
+    const canonical = MUSCLE_TO_CANONICAL[g.toLowerCase()];
+    if (canonical) return canonical;
+  }
+  return groups[0];
+}
+
+/** Get the subgroup display label for a list of muscle groups, if any */
+function subGroupLabel(groups: string[]): string | null {
+  if (groups.length === 0) return null;
+  // First group that is a subgroup key
+  for (const g of groups) {
+    const canonical = MUSCLE_TO_CANONICAL[g.toLowerCase()];
+    if (canonical && canonical !== g.toLowerCase()) {
+      return formatLabel(g);
+    }
+  }
+  return null;
 }
 
 function groupByMuscle(favorites: Favorite[]): [string, Favorite[]][] {
@@ -95,18 +174,79 @@ function groupByMuscle(favorites: Favorite[]): [string, Favorite[]][] {
   });
 }
 
-/** Extract coaching intent from tags array */
 function getIntent(tags: string[]): FavIntent {
   if (tags.includes('progression')) return 'progression';
   if (tags.includes('hypertrophy')) return 'hypertrophy';
   return 'auto';
 }
 
-/** Replace any existing intent tag with the new one */
 function setIntentInTags(tags: string[], intent: FavIntent): string[] {
   const stripped = tags.filter((t) => t !== 'progression' && t !== 'hypertrophy');
   if (intent === 'auto') return stripped;
   return [...stripped, intent];
+}
+
+// ── Two-level muscle group picker ─────────────────────────────────────────────
+
+interface MusclePickerProps {
+  onSelect: (group: string, subGroup: string) => void;
+  busy?: boolean;
+}
+
+function MusclePicker({ onSelect, busy }: MusclePickerProps) {
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+
+  const groupDef = MUSCLE_GROUPS.find((g) => g.key === selectedGroup);
+
+  return (
+    <div>
+      {/* Step 1: pick group */}
+      <p className="text-xs text-[var(--color-text-muted)] mb-1.5">
+        {selectedGroup ? 'Pick a subgroup:' : 'Assign a muscle group:'}
+      </p>
+      {!selectedGroup && (
+        <div className="flex flex-wrap gap-1.5">
+          {MUSCLE_GROUPS.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              disabled={busy}
+              onClick={() => setSelectedGroup(g.key)}
+              className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[var(--color-base-600)] text-[var(--color-text-secondary)] hover:bg-[rgba(139,92,246,0.20)] hover:text-[var(--color-accent-purple)] border border-[var(--glass-border)] hover:border-[rgba(139,92,246,0.4)] transition-colors"
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Step 2: pick subgroup */}
+      {selectedGroup && groupDef && (
+        <div>
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
+            {groupDef.subGroups.map((sub) => (
+              <button
+                key={sub.key}
+                type="button"
+                disabled={busy}
+                onClick={() => onSelect(selectedGroup, sub.key)}
+                className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[rgba(139,92,246,0.12)] text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.25)] border border-[rgba(139,92,246,0.25)] hover:border-[rgba(139,92,246,0.5)] transition-colors"
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedGroup(null)}
+            className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
+          >
+            ← Back
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Intent toggle ──────────────────────────────────────────────────────────────
@@ -167,7 +307,7 @@ interface FavoriteRowProps {
   onTogglePriority: (fav: Favorite) => void;
   onChangeIntent: (fav: Favorite, intent: FavIntent) => void;
   onRemove: (fav: Favorite) => void;
-  onAssignMuscle: (fav: Favorite, muscle: string) => void;
+  onAssignMuscle: (fav: Favorite, group: string, subGroup: string) => void;
 }
 
 function FavoriteRow({ favorite, busy, onTogglePriority, onChangeIntent, onRemove, onAssignMuscle }: FavoriteRowProps) {
@@ -175,6 +315,7 @@ function FavoriteRow({ favorite, busy, onTogglePriority, onChangeIntent, onRemov
   const intent = getIntent(favorite.tags);
   const muscles = favorite.exercise.muscleGroups as string[];
   const hasNoMuscle = muscles.length === 0;
+  const subLabel = subGroupLabel(muscles);
 
   return (
     <div className="py-2.5 border-b border-[var(--glass-border)] last:border-0">
@@ -182,10 +323,8 @@ function FavoriteRow({ favorite, busy, onTogglePriority, onChangeIntent, onRemov
       <div className="flex items-center gap-2 mb-1.5">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{favorite.exercise.name}</p>
-          {muscles.length > 0 && (
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 capitalize">
-              {muscles.slice(0, 2).map(g => g.replace(/_/g, ' ')).join(', ')}
-            </p>
+          {subLabel && (
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{subLabel}</p>
           )}
         </div>
         <button
@@ -202,26 +341,15 @@ function FavoriteRow({ favorite, busy, onTogglePriority, onChangeIntent, onRemov
       {/* Muscle group picker — shown when exercise has no muscle group */}
       {hasNoMuscle && (
         <div className="mb-2">
-          <p className="text-xs text-[var(--color-text-muted)] mb-1.5">Assign a muscle group:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {MUSCLE_GROUP_OPTIONS.map((mg) => (
-              <button
-                key={mg}
-                type="button"
-                disabled={busy}
-                onClick={() => onAssignMuscle(favorite, mg)}
-                className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-base-600)] text-[var(--color-text-muted)] hover:bg-[rgba(139,92,246,0.20)] hover:text-[var(--color-accent-purple)] border border-[var(--glass-border)] hover:border-[rgba(139,92,246,0.4)] transition-colors capitalize"
-              >
-                {mg.replace(/_/g, ' ')}
-              </button>
-            ))}
-          </div>
+          <MusclePicker
+            busy={busy}
+            onSelect={(group, subGroup) => onAssignMuscle(favorite, group, subGroup)}
+          />
         </div>
       )}
 
       {/* Bottom row: priority toggle + intent toggle */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Priority toggle */}
         <div
           className="flex rounded-[var(--radius-sm)] overflow-hidden border border-[var(--glass-border)] text-[10px] font-semibold flex-shrink-0"
           role="group"
@@ -257,7 +385,6 @@ function FavoriteRow({ favorite, busy, onTogglePriority, onChangeIntent, onRemov
           </button>
         </div>
 
-        {/* Intent toggle */}
         <IntentToggle
           intent={intent}
           busy={busy}
@@ -282,8 +409,11 @@ function AddExercisePanel({ existingExerciseIds, onAdded, onCancel }: AddExercis
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
-  const [creatingCustom, setCreatingCustom] = useState(false);
+
+  // Custom exercise creation flow
   const [customName, setCustomName] = useState('');
+  const [customStep, setCustomStep] = useState<'idle' | 'name' | 'muscle'>('idle');
+  const [customGroup, setCustomGroup] = useState<string | null>(null);
   const [customSaving, setCustomSaving] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
 
@@ -320,16 +450,23 @@ function AddExercisePanel({ existingExerciseIds, onAdded, onCancel }: AddExercis
     }
   }
 
-  async function handleCreateCustom() {
+  function startCustom() {
+    setCustomName(search.trim());
+    setCustomStep('name');
+    setCustomGroup(null);
+    setCustomError(null);
+  }
+
+  async function handleCreateCustom(subGroup: string) {
     const name = customName.trim();
-    if (!name) return;
+    if (!name || !customGroup) return;
     setCustomSaving(true);
     setCustomError(null);
     try {
       const exRes = await fetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, muscleGroups: [customGroup, subGroup] }),
       });
       if (!exRes.ok) {
         const d = await exRes.json().catch(() => ({}));
@@ -337,10 +474,9 @@ function AddExercisePanel({ existingExerciseIds, onAdded, onCancel }: AddExercis
       }
       const exData = (await exRes.json()) as { exercise: Exercise };
       await handleAdd(exData.exercise);
-      setCreatingCustom(false);
+      setCustomStep('idle');
     } catch (err) {
       setCustomError(err instanceof Error ? err.message : 'Could not create exercise');
-    } finally {
       setCustomSaving(false);
     }
   }
@@ -354,56 +490,62 @@ function AddExercisePanel({ existingExerciseIds, onAdded, onCancel }: AddExercis
         </button>
       </div>
 
-      <div className="relative mb-2">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setCreatingCustom(false); }}
-          onFocus={() => setShowResults(true)}
-          placeholder="Search exercises…"
-          className="w-full pl-8 pr-3 py-2 text-sm rounded-[var(--radius-md)] bg-[var(--color-base-700)] border border-[var(--glass-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent-purple)]"
-        />
-      </div>
+      {/* Search input — only shown when not in custom creation flow */}
+      {customStep === 'idle' && (
+        <>
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setShowResults(true)}
+              placeholder="Search exercises…"
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-[var(--radius-md)] bg-[var(--color-base-700)] border border-[var(--glass-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent-purple)]"
+            />
+          </div>
 
-      {showResults && !creatingCustom && (
-        <div className="max-h-56 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--color-base-700)]">
-          {loading && <p className="text-xs text-[var(--color-text-muted)] px-3 py-2">Loading…</p>}
-          {!loading && exercises.map((ex) => (
-            <div key={ex.id} className="flex items-center justify-between px-3 py-2 border-b border-[var(--glass-border)] last:border-0">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{ex.name}</p>
-                {(ex.muscleGroups as string[]).length > 0 && (
-                  <p className="text-xs text-[var(--color-text-muted)] capitalize">
-                    {(ex.muscleGroups as string[]).slice(0, 2).map(g => g.replace(/_/g, ' ')).join(', ')}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                disabled={adding === ex.id}
-                onClick={() => handleAdd(ex)}
-                className="flex-shrink-0 ml-3 text-xs px-2.5 py-1 rounded-[var(--radius-sm)] bg-[rgba(139,92,246,0.15)] text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.25)] transition-colors disabled:opacity-50"
-              >
-                {adding === ex.id ? 'Adding…' : '+ Add'}
-              </button>
+          {showResults && (
+            <div className="max-h-56 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--color-base-700)]">
+              {loading && <p className="text-xs text-[var(--color-text-muted)] px-3 py-2">Loading…</p>}
+              {!loading && exercises.map((ex) => (
+                <div key={ex.id} className="flex items-center justify-between px-3 py-2 border-b border-[var(--glass-border)] last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{ex.name}</p>
+                    {(ex.muscleGroups as string[]).length > 0 && (
+                      <p className="text-xs text-[var(--color-text-muted)] capitalize">
+                        {(ex.muscleGroups as string[]).slice(0, 2).map(g => g.replace(/_/g, ' ')).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={adding === ex.id}
+                    onClick={() => handleAdd(ex)}
+                    className="flex-shrink-0 ml-3 text-xs px-2.5 py-1 rounded-[var(--radius-sm)] bg-[rgba(139,92,246,0.15)] text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.25)] transition-colors disabled:opacity-50"
+                  >
+                    {adding === ex.id ? 'Adding…' : '+ Add'}
+                  </button>
+                </div>
+              ))}
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={startCustom}
+                  className="w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)] transition-colors border-t border-[var(--glass-border)]"
+                >
+                  <Plus className="h-3.5 w-3.5 flex-shrink-0" />
+                  {search.trim() ? `Add "${search.trim()}" as custom exercise` : 'Add a custom exercise'}
+                </button>
+              )}
             </div>
-          ))}
-          {!loading && (
-            <button
-              type="button"
-              onClick={() => { setCreatingCustom(true); setCustomName(search.trim()); }}
-              className="w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.10)] transition-colors border-t border-[var(--glass-border)]"
-            >
-              <Plus className="h-3.5 w-3.5 flex-shrink-0" />
-              {search.trim() ? `Add "${search.trim()}" as custom exercise` : 'Add a custom exercise'}
-            </button>
           )}
-        </div>
+        </>
       )}
 
-      {creatingCustom && (
-        <div className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--color-base-700)] p-3 mt-1">
+      {/* Custom exercise: step 1 — name */}
+      {customStep === 'name' && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--color-base-700)] p-3">
           <p className="text-xs text-[var(--color-text-muted)] mb-2">New custom exercise</p>
           <input
             type="text"
@@ -412,15 +554,56 @@ function AddExercisePanel({ existingExerciseIds, onAdded, onCancel }: AddExercis
             placeholder="Exercise name"
             autoFocus
             maxLength={100}
-            className="w-full rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm bg-[var(--color-base-800)] border border-[var(--glass-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent-purple)] mb-2"
+            className="w-full rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm bg-[var(--color-base-800)] border border-[var(--glass-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent-purple)] mb-3"
           />
-          {customError && <p className="text-xs text-[var(--color-error)] mb-2">{customError}</p>}
-          <div className="flex gap-2">
-            <button type="button" onClick={handleCreateCustom} disabled={customSaving || !customName.trim()} className="btn-primary flex-1 text-xs py-1.5 disabled:opacity-60">
-              {customSaving ? 'Creating…' : 'Create & Add'}
-            </button>
-            <button type="button" onClick={() => setCreatingCustom(false)} className="btn-secondary text-xs py-1.5 px-3">Cancel</button>
+          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">Choose a muscle group:</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {MUSCLE_GROUPS.map((g) => (
+              <button
+                key={g.key}
+                type="button"
+                disabled={!customName.trim()}
+                onClick={() => { setCustomGroup(g.key); setCustomStep('muscle'); }}
+                className={[
+                  'px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors',
+                  customGroup === g.key
+                    ? 'bg-[rgba(139,92,246,0.25)] text-[var(--color-accent-purple)] border-[rgba(139,92,246,0.5)]'
+                    : 'bg-[var(--color-base-600)] text-[var(--color-text-secondary)] border-[var(--glass-border)] hover:bg-[rgba(139,92,246,0.15)] hover:text-[var(--color-accent-purple)] hover:border-[rgba(139,92,246,0.35)] disabled:opacity-40',
+                ].join(' ')}
+              >
+                {g.label}
+              </button>
+            ))}
           </div>
+          {customError && <p className="text-xs text-[var(--color-error)] mb-2">{customError}</p>}
+          <button type="button" onClick={() => setCustomStep('idle')} className="btn-secondary text-xs py-1.5 px-3">Cancel</button>
+        </div>
+      )}
+
+      {/* Custom exercise: step 2 — subgroup */}
+      {customStep === 'muscle' && customGroup && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--color-base-700)] p-3">
+          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">Adding: <span className="text-[var(--color-text-primary)] font-medium">{customName}</span></p>
+          <p className="text-xs font-medium text-[var(--color-text-secondary)] mt-2 mb-2">
+            {MUSCLE_GROUPS.find(g => g.key === customGroup)?.label} — pick a subgroup:
+          </p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {MUSCLE_GROUPS.find(g => g.key === customGroup)?.subGroups.map((sub) => (
+              <button
+                key={sub.key}
+                type="button"
+                disabled={customSaving}
+                onClick={() => handleCreateCustom(sub.key)}
+                className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[rgba(139,92,246,0.12)] text-[var(--color-accent-purple)] hover:bg-[rgba(139,92,246,0.25)] border border-[rgba(139,92,246,0.25)] hover:border-[rgba(139,92,246,0.5)] transition-colors disabled:opacity-50"
+              >
+                {customSaving ? '…' : sub.label}
+              </button>
+            ))}
+          </div>
+          {customError && <p className="text-xs text-[var(--color-error)] mb-2">{customError}</p>}
+          <button type="button" onClick={() => setCustomStep('name')} className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
+            ← Back
+          </button>
         </div>
       )}
     </GlassCard>
@@ -455,7 +638,6 @@ export function FavoritesTab() {
       const data = (await res.json()) as { favorites: Favorite[] };
       const favs = data.favorites ?? [];
       setFavorites(favs);
-      // Auto-open groups that have favorites
       const populated = new Set(favs.map((f) => primaryMuscle(f.exercise.muscleGroups)));
       setOpenGroups(populated);
     } catch (err) {
@@ -518,24 +700,23 @@ export function FavoritesTab() {
     }
   }
 
-  async function handleAssignMuscle(fav: Favorite, muscle: string) {
+  async function handleAssignMuscle(fav: Favorite, group: string, subGroup: string) {
     setBusyId(fav.id);
     try {
       const res = await fetch(`/api/exercises/${fav.exercise.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ muscleGroups: [muscle] }),
+        body: JSON.stringify({ muscleGroups: [group, subGroup] }),
       });
       if (!res.ok) throw new Error('Muscle update failed');
-      const canonical = MUSCLE_TO_CANONICAL[muscle] ?? muscle;
       setFavorites((prev) =>
         prev.map((f) =>
           f.id === fav.id
-            ? { ...f, exercise: { ...f.exercise, muscleGroups: [muscle] } }
+            ? { ...f, exercise: { ...f.exercise, muscleGroups: [group, subGroup] } }
             : f
         )
       );
-      setOpenGroups((prev) => new Set([...prev, canonical]));
+      setOpenGroups((prev) => new Set([...prev, group]));
     } catch {
       // leave unchanged
     } finally {
@@ -545,7 +726,6 @@ export function FavoritesTab() {
 
   function handleAdded(favorite: Favorite) {
     setFavorites((prev) => [favorite, ...prev]);
-    // Open the group this exercise belongs to
     const key = primaryMuscle(favorite.exercise.muscleGroups);
     setOpenGroups((prev) => new Set([...prev, key]));
     setShowAdd(false);
@@ -572,20 +752,21 @@ export function FavoritesTab() {
 
   const existingExerciseIds = new Set(favorites.map((f) => f.exercise.id));
 
-  // Build a map: canonical group key → favorites in that group
+  // Build canonical group → favorites map
   const groupMap: Record<string, Favorite[]> = {};
   for (const fav of favorites) {
     const key = primaryMuscle(fav.exercise.muscleGroups);
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(fav);
   }
-  // Collect any groups not in CANONICAL_GROUPS (e.g. "other")
-  const canonicalKeys = new Set(CANONICAL_GROUPS.map((g) => g.key));
+
+  // Any groups not in CANONICAL_GROUPS (e.g. "other")
+  const canonicalKeys = new Set(MUSCLE_GROUPS.map((g) => g.key));
   const extraGroups = Object.keys(groupMap)
     .filter((k) => !canonicalKeys.has(k))
     .map((k) => ({ key: k, label: formatLabel(k) }));
 
-  const allGroups = [...CANONICAL_GROUPS, ...extraGroups];
+  const allGroups = [...MUSCLE_GROUPS.map(g => ({ key: g.key, label: g.label })), ...extraGroups];
 
   return (
     <div className="px-4 py-4">
@@ -614,7 +795,6 @@ export function FavoritesTab() {
           const isOpen = openGroups.has(key);
           return (
             <div key={key} className="rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--color-base-700)] overflow-hidden">
-              {/* Header row */}
               <button
                 type="button"
                 onClick={() => toggleGroup(key)}
@@ -634,7 +814,6 @@ export function FavoritesTab() {
                 }
               </button>
 
-              {/* Expanded content */}
               {isOpen && (
                 <div className="border-t border-[var(--glass-border)] px-4 pb-3">
                   {favs.length === 0 ? (
