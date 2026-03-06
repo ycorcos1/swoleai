@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { OnboardingModal } from '@/components/ui/OnboardingModal';
+import { AIRoutineWizard } from '@/components/coach/AIRoutineWizard';
 import {
   CheckCircle2,
   Dumbbell,
@@ -87,13 +89,13 @@ interface RecentProposal {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const JS_DAY_TO_WEEKDAY: Record<number, string> = {
-  0: 'SUN',
-  1: 'MON',
-  2: 'TUE',
-  3: 'WED',
-  4: 'THU',
-  5: 'FRI',
-  6: 'SAT',
+  0: 'SUNDAY',
+  1: 'MONDAY',
+  2: 'TUESDAY',
+  3: 'WEDNESDAY',
+  4: 'THURSDAY',
+  5: 'FRIDAY',
+  6: 'SATURDAY',
 };
 
 function startOfWeekISO(date: Date): string {
@@ -211,6 +213,22 @@ export default function DashboardPage() {
   const [prSession, setPrSession] = useState<RecentSession | null>(null);
   const [plateaus, setPlateaus] = useState<PlateauCandidate[]>([]);
   const [plateauLoading, setPlateauLoading] = useState(true);
+
+  // Onboarding state (Task F.1)
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+
+  // Check onboarding status on mount
+  useEffect(() => {
+    fetch('/api/profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.profile && data.profile.onboardingComplete === false) {
+          setShowOnboarding(true);
+        }
+      })
+      .catch(() => {/* non-critical */});
+  }, []);
 
   useEffect(() => {
     const now = new Date();
@@ -757,6 +775,22 @@ export default function DashboardPage() {
       {renderVolumeSection()}
       {renderPRSection()}
       {renderPlateauSection()}
+
+      {/* Onboarding Modal (Task F.1) */}
+      {showOnboarding && !showWizard && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          onBuildWithAI={() => {
+            setShowOnboarding(false);
+            setShowWizard(true);
+          }}
+        />
+      )}
+
+      {/* AI Routine Wizard — launched from onboarding */}
+      {showWizard && (
+        <AIRoutineWizard onClose={() => setShowWizard(false)} />
+      )}
     </div>
   );
 }

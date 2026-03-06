@@ -21,6 +21,7 @@ const updateSchema = z.object({
   sessionMinutes: z.number().int().min(15).max(300).optional(),
   units: z.enum(['IMPERIAL', 'METRIC']).optional(),
   equipment: z.enum(['COMMERCIAL', 'HOME']).optional(),
+  onboardingComplete: z.boolean().optional(),
   constraints: z
     .object({
       injuries: z.array(z.string()).optional(),

@@ -8,7 +8,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, ChevronRight, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -85,7 +85,9 @@ export default function CoachInboxPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<ProposalType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inlineMsg, setInlineMsg] = useState<{ type: ProposalType; text: string } | null>(null);
   const [showRoutineWizard, setShowRoutineWizard] = useState(false);
+  const inlineMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchProposals = useCallback(async () => {
     setLoading(true);
@@ -107,9 +109,41 @@ export default function CoachInboxPage() {
     fetchProposals();
   }, [fetchProposals]);
 
+  // Clear inline message timer on unmount
+  useEffect(() => {
+    return () => {
+      if (inlineMsgTimer.current) clearTimeout(inlineMsgTimer.current);
+    };
+  }, []);
+
+  function showInlineMsg(type: ProposalType, text: string) {
+    setInlineMsg({ type, text });
+    if (inlineMsgTimer.current) clearTimeout(inlineMsgTimer.current);
+    inlineMsgTimer.current = setTimeout(() => setInlineMsg(null), 6000);
+  }
+
   async function handleGenerate(endpoint: string, type: ProposalType) {
-    setGenerating(type);
     setError(null);
+    setInlineMsg(null);
+
+    // E.1: Plateau pre-flight — require at least 3 completed sessions
+    if (type === 'PLATEAU') {
+      try {
+        const check = await fetch('/api/history?status=COMPLETED&limit=3');
+        if (check.ok) {
+          const data = await check.json();
+          const count: number = data.pagination?.total ?? (data.sessions?.length ?? 0);
+          if (count < 3) {
+            showInlineMsg('PLATEAU', 'Log at least 3 workouts before running a Plateau analysis.');
+            return;
+          }
+        }
+      } catch {
+        // If the check fails, proceed and let the API handle it
+      }
+    }
+
+    setGenerating(type);
     try {
       const res = await fetch(endpoint, { method: 'POST' });
       if (!res.ok) {
@@ -117,6 +151,18 @@ export default function CoachInboxPage() {
         throw new Error(data.message ?? 'Failed to generate');
       }
       const data = await res.json();
+
+      // E.1: Guard against no proposal in response (e.g. plateau with no candidates)
+      if (!data.proposal?.id) {
+        showInlineMsg(
+          type,
+          type === 'PLATEAU'
+            ? 'Not enough data to identify a plateau yet. Keep training and try again after a few more sessions.'
+            : data.message ?? 'No proposal was generated.'
+        );
+        return;
+      }
+
       // Navigate directly to the new proposal
       router.push(`/app/coach/${data.proposal.id}`);
     } catch (err) {
@@ -186,6 +232,13 @@ export default function CoachInboxPage() {
         {error && (
           <div className="rounded-[var(--radius-md)] border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
+          </div>
+        )}
+
+        {/* Inline message (E.1 — plateau/weekly feedback) */}
+        {inlineMsg && (
+          <div className="rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            {inlineMsg.text}
           </div>
         )}
 

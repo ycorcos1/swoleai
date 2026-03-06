@@ -33,6 +33,8 @@ import {
   TrendingUp,
   Undo2,
   ArrowLeftRight,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
 import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList, SwapExerciseSheet } from '@/components/workout';
@@ -54,6 +56,10 @@ interface ExerciseCardProps {
   dragHandle?: React.ReactNode;
   /** Swap button handler (Task 7.2) */
   onTapSwap?: () => void;
+  /** Joint stress flags for this exercise (H.1) */
+  jointStressFlags?: Record<string, string>;
+  /** Called when user dismisses the stress badge for this exercise (H.1) */
+  onDismissStressBadge?: () => void;
 }
 
 interface BottomBarProps {
@@ -116,7 +122,7 @@ function ElapsedTime({ startedAt }: ElapsedTimeProps) {
  * - Individual sets as tappable pills (Task 5.4)
  * - Add set button
  */
-function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSwap }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSwap, jointStressFlags, onDismissStressBadge }: ExerciseCardProps) {
   // Calculate sets summary
   const setsCount = exercise.sets.length;
   const completedSets = exercise.sets.filter((s) => s.weight > 0 || s.reps > 0);
@@ -128,6 +134,16 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSw
       current.weight > (best?.weight ?? 0) ? current : best
     , completedSets[0]);
   }, [completedSets]);
+
+  // Build stress badge labels (H.1)
+  const stressLabels = useMemo(() => {
+    if (!jointStressFlags) return [];
+    return Object.entries(jointStressFlags)
+      .filter(([, level]) => level === 'high' || level === 'moderate' || level === 'medium')
+      .map(([joint]) => joint.replace(/_/g, ' '));
+  }, [jointStressFlags]);
+
+  const hasStress = stressLabels.length > 0;
 
   return (
     <div className="glass-card p-4">
@@ -193,6 +209,35 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSw
           </div>
         </button>
       </div>
+
+      {/* Joint Stress Badge (H.1) — non-blocking inline warning */}
+      {hasStress && onDismissStressBadge && (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span className="text-xs text-amber-300 truncate">
+              Joint stress: {stressLabels.join(', ')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onTapSwap && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onTapSwap(); }}
+                className="text-xs font-medium text-amber-400 hover:text-amber-300 underline underline-offset-2 transition-colors"
+              >
+                Swap?
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDismissStressBadge(); }}
+              className="flex h-5 w-5 items-center justify-center rounded text-amber-400/60 hover:text-amber-300 transition-colors"
+              aria-label="Dismiss stress warning"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Individual Sets - Tappable pills for editing (Task 5.4) */}
       {completedSets.length > 0 && (
@@ -365,6 +410,42 @@ export default function WorkoutSessionPage() {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
+  // Units preference (G.4)
+  const [units, setUnits] = useState<'IMPERIAL' | 'METRIC'>('IMPERIAL');
+
+  // Fetch units preference once on mount (G.4)
+  useEffect(() => {
+    fetch('/api/profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.profile?.units) {
+          setUnits(data.profile.units as 'IMPERIAL' | 'METRIC');
+        }
+      })
+      .catch(() => {/* non-critical */});
+  }, []);
+
+  // Joint stress flags map: exerciseId → flags (H.1)
+  const [stressFlagsMap, setStressFlagsMap] = useState<Record<string, Record<string, string>>>({});
+  // Set of exercise localIds whose stress badge has been dismissed this session (H.1)
+  const [dismissedStressBadges, setDismissedStressBadges] = useState<Set<string>>(new Set());
+
+  // Fetch exercise details to get jointStressFlags once per session load (H.1)
+  useEffect(() => {
+    fetch('/api/exercises')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.exercises) return;
+        const map: Record<string, Record<string, string>> = {};
+        for (const ex of data.exercises) {
+          if (ex.jointStressFlags && Object.keys(ex.jointStressFlags).length > 0) {
+            map[ex.id] = ex.jointStressFlags as Record<string, string>;
+          }
+        }
+        setStressFlagsMap(map);
+      })
+      .catch(() => {/* non-critical */});
+  }, []);
   // Undo state (Task 5.5)
   const [isUndoing, setIsUndoing] = useState(false);
   
@@ -609,6 +690,14 @@ export default function WorkoutSessionPage() {
                 onTapEditSet={(set) => handleEditSetTap(exercise, set)}
                 onTapSwap={() => handleOpenSwap(exercise)}
                 dragHandle={dragHandle}
+                jointStressFlags={
+                  !dismissedStressBadges.has(exercise.localId)
+                    ? stressFlagsMap[exercise.exerciseId]
+                    : undefined
+                }
+                onDismissStressBadge={() =>
+                  setDismissedStressBadges((prev) => new Set([...prev, exercise.localId]))
+                }
               />
             )}
           />
@@ -645,6 +734,7 @@ export default function WorkoutSessionPage() {
           onLogSet={handleLogSet}
           onUpdateSet={handleUpdateSet}
           editingSet={editingSet ?? undefined}
+          units={units}
         />
       )}
 

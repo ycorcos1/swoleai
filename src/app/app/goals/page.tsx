@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Sparkles,
   ChevronRight,
+  Bot,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -542,6 +543,19 @@ export default function GoalsPage() {
       </header>
 
       <GoalsWizard onSaved={() => setGuardrailsRefresh((n) => n + 1)} />
+
+      {/* G.3: Context — how goals are used */}
+      <div className="flex items-start gap-3 rounded-2xl bg-[var(--color-accent-purple)]/5 border border-[var(--color-accent-purple)]/15 px-4 py-3.5 mb-4">
+        <Bot className="h-4 w-4 text-[var(--color-accent-purple)] mt-0.5 shrink-0" />
+        <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+          Your goals are shared with your AI coach and used to generate personalised training
+          proposals.{' '}
+          <a href="/app/coach" className="text-[var(--color-accent-purple)] hover:underline font-medium">
+            View AI Coach →
+          </a>
+        </p>
+      </div>
+
       <AIGuardrails refresh={guardrailsRefresh} />
     </div>
   );

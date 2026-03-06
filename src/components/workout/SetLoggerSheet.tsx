@@ -63,6 +63,8 @@ export interface SetLoggerSheetProps {
   ) => Promise<void>;
   /** Set to edit (if provided, sheet opens in edit mode) (Task 5.4) */
   editingSet?: ActiveSessionSet;
+  /** Units system for weight display (G.4) */
+  units?: 'IMPERIAL' | 'METRIC';
 }
 
 interface StepperProps {
@@ -310,6 +312,7 @@ export function SetLoggerSheet({
   onLogSet,
   onUpdateSet,
   editingSet,
+  units = 'IMPERIAL',
 }: SetLoggerSheetProps) {
   const [weight, setWeight] = useState(0);
   const [reps, setReps] = useState(0);
@@ -502,7 +505,7 @@ export function SetLoggerSheet({
               largeStep={10}
               min={0}
               max={9999}
-              unit="lbs"
+              unit={units === 'METRIC' ? 'kg' : 'lbs'}
             />
 
             {/* Reps Stepper */}

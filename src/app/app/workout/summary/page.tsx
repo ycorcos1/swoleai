@@ -272,6 +272,21 @@ export default function WorkoutSummaryPage() {
   const [prs, setPrs] = React.useState<PRResult[]>([]);
   const [prsLoading, setPrsLoading] = React.useState(false);
 
+  // First-session milestone (G.2) — check if this is the user's first completed workout
+  const [isFirstSession, setIsFirstSession] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!summary?.serverSessionId) return;
+    fetch('/api/history?status=COMPLETED&limit=2')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.pagination?.total === 1) {
+          setIsFirstSession(true);
+        }
+      })
+      .catch(() => {/* non-critical */});
+  }, [summary?.serverSessionId]);
+
   React.useEffect(() => {
     if (!summary?.serverSessionId) return;
 
@@ -298,6 +313,17 @@ export default function WorkoutSummaryPage() {
 
     return () => { cancelled = true; };
   }, [summary?.serverSessionId]);
+
+  // Units preference (G.4)
+  const [units, setUnits] = React.useState<'IMPERIAL' | 'METRIC'>('IMPERIAL');
+  React.useEffect(() => {
+    fetch('/api/profile')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.profile?.units) setUnits(data.profile.units as 'IMPERIAL' | 'METRIC');
+      })
+      .catch(() => {});
+  }, []);
 
   // Sort exercises by their orderIndex for consistent display
   const sortedExercises = summary?.exercises
@@ -349,6 +375,21 @@ export default function WorkoutSummaryPage() {
         </p>
       </div>
 
+      {/* ── First-session milestone (G.2) ── */}
+      {isFirstSession && (
+        <div className="px-4 mb-6">
+          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[var(--color-accent-purple)]/15 to-[var(--color-accent-blue)]/15 border border-[var(--color-accent-purple)]/25 px-4 py-3.5">
+            <span className="text-2xl">🎉</span>
+            <div>
+              <p className="font-semibold text-[var(--color-text-primary)]">First workout logged!</p>
+              <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
+                You&apos;re on your way. Keep showing up and the results will follow.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Stats row ── */}
       <div className="px-4 mb-6">
         <GlassCard>
@@ -368,7 +409,7 @@ export default function WorkoutSummaryPage() {
             <StatBadge
               icon={<TrendingUp className="h-5 w-5 text-[var(--color-success)]" />}
               label="Volume"
-              value={`${formatVolume(summary.totalVolume)} lbs`}
+              value={`${formatVolume(summary.totalVolume)} ${units === 'METRIC' ? 'kg' : 'lbs'}`}
             />
           </div>
         </GlassCard>

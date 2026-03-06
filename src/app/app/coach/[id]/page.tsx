@@ -17,7 +17,7 @@
 
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -265,7 +265,21 @@ export default function ProposalDetailPage({
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<'accept' | 'reject' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Toast state (E.3)
+  const [toast, setToast] = useState<{ text: string; variant: 'success' | 'info' } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((text: string, variant: 'success' | 'info' = 'success') => {
+    setToast({ text, variant });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     fetch(`/api/proposals/${id}`)
@@ -286,9 +300,9 @@ export default function ProposalDetailPage({
 
       setProposal((prev) => prev ? { ...prev, status: 'ACCEPTED' } : prev);
       const msg = data.newVersionId
-        ? `Accepted! New routine version created.`
-        : 'Accepted!';
-      setSuccessMsg(msg);
+        ? 'Proposal accepted. New routine version created.'
+        : 'Proposal accepted.';
+      showToast(msg);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Accept failed');
     } finally {
@@ -308,7 +322,7 @@ export default function ProposalDetailPage({
       });
       if (!res.ok) throw new Error('Reject failed');
       setProposal((prev) => prev ? { ...prev, status: 'REJECTED' } : prev);
-      setSuccessMsg('Proposal rejected.');
+      showToast('Proposal rejected.', 'info');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Reject failed');
     } finally {
@@ -379,22 +393,27 @@ export default function ProposalDetailPage({
           </div>
         )}
 
-        {/* Success */}
-        {successMsg && (
-          <div className="rounded-[var(--radius-md)] border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-            {successMsg}
-          </div>
-        )}
-
-        {/* Rationale */}
-        {proposal.rationale && (
-          <GlassCard>
-            <div className="flex items-start gap-2">
-              <Bot className="h-4 w-4 text-[var(--color-accent-purple)] mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-[var(--color-text-secondary)]">{proposal.rationale}</p>
-            </div>
-          </GlassCard>
-        )}
+        {/* Why this recommendation (G.1) */}
+        {(() => {
+          const reasoning =
+            proposal.rationale ??
+            (proposal.proposalJson as Record<string, unknown>)?.rationale as string | undefined ??
+            (proposal.proposalJson as Record<string, unknown>)?.overallDiagnosis as string | undefined ??
+            (proposal.proposalJson as Record<string, unknown>)?.summary as string | undefined;
+          return reasoning ? (
+            <GlassCard>
+              <div className="flex items-start gap-2 mb-2">
+                <Bot className="h-4 w-4 text-[var(--color-accent-purple)] mt-0.5 flex-shrink-0" />
+                <p className="text-xs font-semibold text-[var(--color-accent-purple)] uppercase tracking-wide">
+                  Why this recommendation
+                </p>
+              </div>
+              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed pl-6">
+                {reasoning}
+              </p>
+            </GlassCard>
+          ) : null;
+        })()}
 
         {/* Proposal content */}
         <GlassCard>
@@ -433,6 +452,24 @@ export default function ProposalDetailPage({
             )}
             Accept
           </button>
+        </div>
+      )}
+
+      {/* Toast (E.3) — auto-dismiss confirmation */}
+      {toast && (
+        <div
+          className={`fixed bottom-24 left-4 right-4 z-50 flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-lg border animate-in slide-in-from-bottom duration-300 ${
+            toast.variant === 'success'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              : 'bg-[var(--color-base-600)] border-[var(--glass-border)] text-[var(--color-text-secondary)]'
+          }`}
+        >
+          {toast.variant === 'success' ? (
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+          ) : (
+            <XCircle className="h-5 w-5 shrink-0 text-red-400" />
+          )}
+          <span className="text-sm font-medium">{toast.text}</span>
         </div>
       )}
     </div>
