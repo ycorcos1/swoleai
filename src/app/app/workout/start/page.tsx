@@ -365,7 +365,7 @@ export default function WorkoutStartPage() {
   );
 
   return (
-    <div className="px-4 py-6">
+    <div className="px-4 py-6 pb-24">
       {/* Header */}
       <header className="mb-6">
         <h1 className="text-2xl font-bold">Start Workout</h1>

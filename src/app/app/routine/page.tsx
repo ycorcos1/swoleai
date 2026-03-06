@@ -87,7 +87,7 @@ export default function RoutinePage() {
       </nav>
 
       {/* Tab panels */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-24">
         {TABS.map(({ id }) => (
           <div
             key={id}

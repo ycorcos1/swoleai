@@ -144,7 +144,7 @@ export default function CoachInboxPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-4">
         {/* Create Routine with AI */}
         <button
           onClick={() => setShowRoutineWizard(true)}
