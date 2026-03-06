@@ -32,6 +32,4 @@
   <!-- Right plate outer -->
   <rect x="428" y="200" width="24" height="112" rx="10" fill="url(#accentGrad)" filter="url(#glow)"/>
 
-  <!-- Subtle "AI" text below -->
-  <text x="256" y="370" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="700" fill="url(#accentGrad)" text-anchor="middle" letter-spacing="6" filter="url(#glow)">AI</text>
 </svg>

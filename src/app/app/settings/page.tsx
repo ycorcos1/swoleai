@@ -6,9 +6,8 @@
  * Sections:
  * 1. Profile — email display, unit preference, account created date
  * 2. Data — export JSON/CSV, import JSON
- * 3. Sync status expectations
- * 4. Danger Zone — delete account
- * 5. Logout
+ * 3. Danger Zone — delete account
+ * 4. Logout
  */
 
 import { useRef, useState, useEffect } from 'react';
@@ -30,7 +29,6 @@ import {
   Bot,
   ChevronRight,
 } from 'lucide-react';
-import { SyncStatusPill } from '@/components/ui/SyncStatusPill';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -156,27 +154,6 @@ function ProfileSection() {
   );
 }
 
-// =============================================================================
-// Sync status section
-// =============================================================================
-
-function SyncSection() {
-  return (
-    <section className="rounded-2xl bg-[var(--color-base-700)] p-5 flex flex-col gap-3">
-      <h2 className="font-semibold text-lg">Sync Status</h2>
-      <div className="flex items-center gap-3">
-        <SyncStatusPill showCount />
-        <p className="text-sm text-[var(--color-text-secondary)]">
-          Workouts are logged offline first and synced when connected.
-        </p>
-      </div>
-      <p className="text-xs text-[var(--color-text-muted)]">
-        If you see &ldquo;Pending&rdquo;, open the app online to sync. Your data
-        is never lost — it lives on this device until synced.
-      </p>
-    </section>
-  );
-}
 
 // =============================================================================
 // Data section — export + import
@@ -510,8 +487,6 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold">Settings</h1>
       <ProfileSection />
       <QuickLinksSection />
-      <SyncSection />
-      <DataSection />
       <LogoutSection />
       <DeleteAccountSection />
     </div>

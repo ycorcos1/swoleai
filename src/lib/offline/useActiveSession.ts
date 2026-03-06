@@ -52,6 +52,8 @@ export interface UseActiveSessionReturn {
   startSession: (options: StartSessionOptions) => Promise<void>;
   /** End the current workout session */
   endSession: () => Promise<void>;
+  /** Discard (abandon) the current workout session permanently */
+  abandonSession: () => Promise<void>;
   /** Add an exercise to the current session */
   addExercise: (exercise: Omit<ActiveSessionExercise, 'orderIndex' | 'sets'>) => Promise<void>;
   /** Remove an exercise from the current session */
@@ -244,13 +246,35 @@ export function useActiveSession(): UseActiveSessionReturn {
         setCanUndo(false);
       }
 
-      // Enqueue mutation for server sync (only if we have a server session ID)
+      // Task C.2: Call END_SESSION API directly so history is immediately
+      // visible. Fall back to the mutation queue only when offline.
       if (serverSessionId) {
-        await enqueueMutation('END_SESSION', {
-          sessionId: serverSessionId,
-          status: 'COMPLETED',
-        });
-        await syncService.notifyMutationAdded();
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        if (isOnline) {
+          try {
+            await fetch(`/api/workouts/${serverSessionId}/end`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ status: 'COMPLETED' }),
+            });
+            // Direct call succeeded — no need to queue
+          } catch {
+            // Network failure despite navigator.onLine — fall back to queue
+            await enqueueMutation('END_SESSION', {
+              sessionId: serverSessionId,
+              status: 'COMPLETED',
+            });
+            await syncService.notifyMutationAdded();
+          }
+        } else {
+          // Offline: queue for later sync
+          await enqueueMutation('END_SESSION', {
+            sessionId: serverSessionId,
+            status: 'COMPLETED',
+          });
+          await syncService.notifyMutationAdded();
+        }
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to end session');
@@ -593,12 +617,59 @@ export function useActiveSession(): UseActiveSessionReturn {
     }
   }, []);
 
+  // =============================================================================
+  // ABANDON SESSION (Task C.3)
+  // =============================================================================
+
+  /**
+   * Discard (abandon) the current session.
+   * Clears IndexedDB, marks as ABANDONED on server, navigates away.
+   */
+  const abandonSession = useCallback(async (): Promise<void> => {
+    try {
+      setError(null);
+
+      const current = await getActiveSession();
+      const serverSessionId = current?.serverSessionId;
+
+      // Clear local state first
+      await clearActiveSession();
+      clearUndoStack();
+      if (mountedRef.current) {
+        setCanUndo(false);
+      }
+
+      if (serverSessionId) {
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        if (isOnline) {
+          try {
+            await fetch(`/api/workouts/${serverSessionId}/end`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ status: 'ABANDONED' }),
+            });
+          } catch {
+            // Best-effort — if offline, just leave it; server will time it out
+          }
+        }
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to abandon session');
+      if (mountedRef.current) {
+        setError(error);
+      }
+      throw error;
+    }
+  }, []);
+
   return {
     session,
     isLoading,
     error,
     startSession,
     endSession,
+    abandonSession,
     addExercise,
     removeExercise,
     updateExercise,

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * AddExerciseSheet — Task 5.8
+ * AddExerciseSheet — Task 5.8 / Task B.3
  *
  * A bottom sheet for searching and adding exercises mid-workout.
  *
@@ -11,10 +11,11 @@
  * - All other exercises listed below
  * - Per-row loading indicator while exercise is being added
  * - Instant add: exercise appears in workout immediately (IndexedDB write)
+ * - "Create custom exercise" inline form (Task B.3)
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Search, Star, Dumbbell, Loader2, Plus } from 'lucide-react';
+import { X, Search, Star, Dumbbell, Loader2, Plus, ChevronDown } from 'lucide-react';
 import type { ActiveSessionExercise } from '@/lib/offline';
 
 // =============================================================================
@@ -166,6 +167,171 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 // =============================================================================
+// CREATE CUSTOM EXERCISE FORM
+// =============================================================================
+
+const EXERCISE_TYPES = [
+  { value: 'BARBELL', label: 'Barbell' },
+  { value: 'DUMBBELL', label: 'Dumbbell' },
+  { value: 'CABLE', label: 'Cable' },
+  { value: 'MACHINE', label: 'Machine' },
+  { value: 'BODYWEIGHT', label: 'Bodyweight' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const MUSCLE_GROUPS = [
+  { value: 'chest', label: 'Chest' },
+  { value: 'back', label: 'Back' },
+  { value: 'shoulders', label: 'Shoulders' },
+  { value: 'biceps', label: 'Biceps' },
+  { value: 'triceps', label: 'Triceps' },
+  { value: 'quads', label: 'Quads' },
+  { value: 'hamstrings', label: 'Hamstrings' },
+  { value: 'glutes', label: 'Glutes' },
+  { value: 'calves', label: 'Calves' },
+  { value: 'core', label: 'Core' },
+  { value: 'other', label: 'Other' },
+];
+
+interface CreateExerciseFormProps {
+  initialName?: string;
+  onCreated: (exercise: Exercise) => void;
+  onCancel: () => void;
+}
+
+function CreateExerciseForm({ initialName = '', onCreated, onCancel }: CreateExerciseFormProps) {
+  const [name, setName] = useState(initialName);
+  const [type, setType] = useState('OTHER');
+  const [muscleGroup, setMuscleGroup] = useState('other');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => nameRef.current?.focus(), 50);
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) { setError('Name is required'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/exercises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          type,
+          muscleGroups: [muscleGroup],
+          equipmentTags: [],
+          jointStressFlags: {},
+        }),
+      });
+      const data = await res.json() as { exercise?: Exercise; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to create exercise');
+        return;
+      }
+      if (data.exercise) onCreated(data.exercise);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="px-4 py-4 flex flex-col gap-3 border-t border-[var(--glass-border)]">
+      <p className="text-sm font-semibold text-[var(--color-text-primary)]">Create custom exercise</p>
+
+      <input
+        ref={nameRef}
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Exercise name"
+        maxLength={100}
+        className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-base-700)] border border-[var(--glass-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-purple)]/50"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="relative">
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full appearance-none px-3 py-2.5 rounded-xl bg-[var(--color-base-700)] border border-[var(--glass-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-purple)]/50 pr-8"
+          >
+            {EXERCISE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-muted)] pointer-events-none" />
+        </div>
+        <div className="relative">
+          <select
+            value={muscleGroup}
+            onChange={(e) => setMuscleGroup(e.target.value)}
+            className="w-full appearance-none px-3 py-2.5 rounded-xl bg-[var(--color-base-700)] border border-[var(--glass-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-purple)]/50 pr-8"
+          >
+            {MUSCLE_GROUPS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--color-text-muted)] pointer-events-none" />
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-2.5 rounded-xl bg-[var(--color-base-600)] text-sm font-medium text-[var(--color-text-secondary)] hover:opacity-90 transition-opacity"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="flex-1 py-2.5 rounded-xl bg-[var(--color-accent-purple)] text-sm font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {saving ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// =============================================================================
+// CREATE EXERCISE BUTTON
+// =============================================================================
+
+function CreateExerciseButton({ query, onClick }: { query: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-base-700)] transition-colors"
+    >
+      <div className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--color-accent-purple)]/20">
+        <Plus className="h-5 w-5 text-[var(--color-accent-purple)]" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm text-[var(--color-accent-purple)]">
+          {query ? `Create "${query}"` : 'Create custom exercise'}
+        </p>
+        <p className="text-xs text-[var(--color-text-muted)]">Add an exercise not in the list</p>
+      </div>
+    </button>
+  );
+}
+
+// =============================================================================
 // ADD EXERCISE SHEET COMPONENT
 // =============================================================================
 
@@ -180,13 +346,14 @@ export function AddExerciseSheet({
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch exercises + favorites when the sheet opens
   useEffect(() => {
     if (!isOpen) {
-      // Reset query when closed
       setQuery('');
+      setShowCreateForm(false);
       return;
     }
 
@@ -197,15 +364,14 @@ export function AddExerciseSheet({
       fetch('/api/favorites').then((r) => r.json()),
     ])
       .then(([exercisesData, favoritesData]) => {
-        setExercises(exercisesData.exercises ?? []);
-        setFavorites(favoritesData.favorites ?? []);
+        setExercises((exercisesData as { exercises?: Exercise[] }).exercises ?? []);
+        setFavorites((favoritesData as { favorites?: FavoriteItem[] }).favorites ?? []);
       })
       .catch((err) => {
         console.error('Failed to fetch exercises/favorites:', err);
       })
       .finally(() => {
         setIsLoading(false);
-        // Auto-focus search input after data loads
         setTimeout(() => searchInputRef.current?.focus(), 100);
       });
   }, [isOpen]);
@@ -253,7 +419,7 @@ export function AddExerciseSheet({
   // Handle selecting an exercise to add to the session
   const handleSelectExercise = useCallback(
     async (exercise: Exercise) => {
-      if (addingId) return; // Prevent concurrent adds
+      if (addingId) return;
 
       setAddingId(exercise.id);
       try {
@@ -262,11 +428,9 @@ export function AddExerciseSheet({
           exerciseId: exercise.id,
           exerciseName: exercise.name,
         });
-        // Success — close the sheet
         onClose();
       } catch (error) {
         console.error('Failed to add exercise:', error);
-        // Keep sheet open on error so user can retry
       } finally {
         setAddingId(null);
       }
@@ -274,7 +438,16 @@ export function AddExerciseSheet({
     [addingId, onAddExercise, onClose]
   );
 
-  // Don't render when closed
+  // Handle custom exercise created — add it to the list and immediately add to session
+  const handleExerciseCreated = useCallback(
+    async (exercise: Exercise) => {
+      setExercises((prev) => [...prev, exercise]);
+      setShowCreateForm(false);
+      await handleSelectExercise(exercise);
+    },
+    [handleSelectExercise]
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -330,70 +503,95 @@ export function AddExerciseSheet({
             </div>
           </div>
 
+          {/* Create form (shown inline when triggered) */}
+          {showCreateForm && (
+            <div className="flex-shrink-0">
+              <CreateExerciseForm
+                initialName={query}
+                onCreated={handleExerciseCreated}
+                onCancel={() => setShowCreateForm(false)}
+              />
+            </div>
+          )}
+
           {/* Exercise list */}
-          <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
-              /* Loading state */
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin text-[var(--color-accent-purple)]" />
-              </div>
-            ) : totalResults === 0 ? (
-              /* Empty state */
-              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                <Dumbbell className="h-12 w-12 text-[var(--color-text-muted)] mb-3" />
-                <p className="text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                  No exercises found
-                </p>
-                {query && (
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    Try a different search term
-                  </p>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* ⭐ Favorites section — pinned to top */}
-                {filteredFavorites.length > 0 && (
-                  <section>
-                    <SectionHeader label="⭐ Favorites" />
-                    {filteredFavorites.map((fav) => (
-                      <ExerciseRow
-                        key={fav.exercise.id}
-                        exercise={fav.exercise}
-                        isFavorite
-                        isAdded={currentIds.has(fav.exercise.id)}
-                        isAdding={addingId === fav.exercise.id}
-                        onSelect={handleSelectExercise}
-                      />
-                    ))}
-                  </section>
-                )}
+          {!showCreateForm && (
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-[var(--color-accent-purple)]" />
+                </div>
+              ) : totalResults === 0 ? (
+                /* Empty state — show create CTA prominently */
+                <div className="flex flex-col items-center justify-center py-10 px-6 text-center gap-4">
+                  <Dumbbell className="h-12 w-12 text-[var(--color-text-muted)]" />
+                  <div>
+                    <p className="text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                      {query ? `No results for "${query}"` : 'No exercises found'}
+                    </p>
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                      Create a custom exercise to add it to your workout
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-accent-purple)] text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {query ? `Create "${query}"` : 'Create custom exercise'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* ⭐ Favorites section — pinned to top */}
+                  {filteredFavorites.length > 0 && (
+                    <section>
+                      <SectionHeader label="⭐ Favorites" />
+                      {filteredFavorites.map((fav) => (
+                        <ExerciseRow
+                          key={fav.exercise.id}
+                          exercise={fav.exercise}
+                          isFavorite
+                          isAdded={currentIds.has(fav.exercise.id)}
+                          isAdding={addingId === fav.exercise.id}
+                          onSelect={handleSelectExercise}
+                        />
+                      ))}
+                    </section>
+                  )}
 
-                {/* All exercises section */}
-                {filteredNonFavorites.length > 0 && (
-                  <section>
-                    <SectionHeader
-                      label={
-                        filteredFavorites.length > 0 ? 'All Exercises' : 'Exercises'
-                      }
-                    />
-                    {filteredNonFavorites.map((exercise) => (
-                      <ExerciseRow
-                        key={exercise.id}
-                        exercise={exercise}
-                        isAdded={currentIds.has(exercise.id)}
-                        isAdding={addingId === exercise.id}
-                        onSelect={handleSelectExercise}
+                  {/* All exercises section */}
+                  {filteredNonFavorites.length > 0 && (
+                    <section>
+                      <SectionHeader
+                        label={
+                          filteredFavorites.length > 0 ? 'All Exercises' : 'Exercises'
+                        }
                       />
-                    ))}
-                  </section>
-                )}
+                      {filteredNonFavorites.map((exercise) => (
+                        <ExerciseRow
+                          key={exercise.id}
+                          exercise={exercise}
+                          isAdded={currentIds.has(exercise.id)}
+                          isAdding={addingId === exercise.id}
+                          onSelect={handleSelectExercise}
+                        />
+                      ))}
+                    </section>
+                  )}
 
-                {/* Bottom padding so last item isn't cut off */}
-                <div className="h-6" />
-              </>
-            )}
-          </div>
+                  {/* Create custom exercise button at the bottom of results */}
+                  <CreateExerciseButton
+                    query={query}
+                    onClick={() => setShowCreateForm(true)}
+                  />
+
+                  <div className="h-6" />
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>

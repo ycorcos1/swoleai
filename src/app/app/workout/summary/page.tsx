@@ -329,7 +329,7 @@ export default function WorkoutSummaryPage() {
   // =============================================================================
 
   return (
-    <div className="flex flex-col min-h-full pb-6">
+    <div className="flex flex-col min-h-full pb-28">
       {/* ── Top completion header ── */}
       <div className="px-4 pt-8 pb-6 text-center">
         {/* Success icon */}

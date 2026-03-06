@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
 import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList, SwapExerciseSheet } from '@/components/workout';
+import { RestTimer } from '@/components/workout/RestTimer';
 
 // =============================================================================
 // TYPES
@@ -354,11 +355,16 @@ export default function WorkoutSessionPage() {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sessionId = params.id as string; // Will be used for deep-linking in future tasks
-  const { session, isLoading, endSession, addExercise, updateExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction } = useActiveSessionContext();
+  const { session, isLoading, endSession, addExercise, updateExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction, abandonSession } = useActiveSessionContext();
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [showRestTimer, setShowRestTimer] = useState(false);
+  // More options sheet (Task C.3)
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
   // Undo state (Task 5.5)
   const [isUndoing, setIsUndoing] = useState(false);
   
@@ -401,9 +407,8 @@ export default function WorkoutSessionPage() {
   );
 
   const handleToggleTimer = useCallback(() => {
-    // TODO: Task 5.7 - Implement rest timer
     setIsTimerActive((prev) => !prev);
-    console.log('Timer toggled - implement in Task 5.7');
+    setShowRestTimer((prev) => !prev);
   }, []);
 
   // Undo handler (Task 5.5)
@@ -427,6 +432,25 @@ export default function WorkoutSessionPage() {
     if (isEndingWorkout) return;
     setShowEndWorkoutModal(true);
   }, [isEndingWorkout]);
+
+  // Discard session handlers (Task C.3)
+  const handleDiscardTap = useCallback(() => {
+    setShowMoreOptions(false);
+    setTimeout(() => setShowDiscardConfirm(true), 150);
+  }, []);
+
+  const handleConfirmDiscard = useCallback(async () => {
+    if (isDiscarding) return;
+    setIsDiscarding(true);
+    try {
+      await abandonSession();
+      setShowDiscardConfirm(false);
+      router.replace('/app/workout/start');
+    } catch (error) {
+      console.error('Failed to discard session:', error);
+      setIsDiscarding(false);
+    }
+  }, [isDiscarding, abandonSession, router]);
 
   const handleConfirmEndWorkout = useCallback(async () => {
     setIsEndingWorkout(true);
@@ -467,6 +491,9 @@ export default function WorkoutSessionPage() {
       set: Omit<ActiveSessionSet, 'setIndex' | 'loggedAt'>
     ) => {
       await logSet(exerciseLocalId, set);
+      // Auto-start rest timer after logging a set (Task C.1)
+      setIsTimerActive(true);
+      setShowRestTimer(true);
     },
     [logSet]
   );
@@ -556,6 +583,7 @@ export default function WorkoutSessionPage() {
             </button>
             <SyncStatusPill showCount={false} />
             <button
+              onClick={() => setShowMoreOptions(true)}
               className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--color-base-600)] transition-colors"
               aria-label="More options"
             >
@@ -638,6 +666,73 @@ export default function WorkoutSessionPage() {
           onSwap={handleSwapExercise}
         />
       )}
+
+      {/* Rest Timer (Task C.1) */}
+      {showRestTimer && (
+        <RestTimer
+          onClose={() => {
+            setShowRestTimer(false);
+            setIsTimerActive(false);
+          }}
+        />
+      )}
+
+      {/* More Options Sheet (Task C.3) */}
+      {showMoreOptions && (
+        <>
+          <div
+            className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowMoreOptions(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed inset-x-0 bottom-0 z-[70] animate-in slide-in-from-bottom duration-300">
+            <div className="bg-[var(--color-base-800)] border-t border-[var(--glass-border)] rounded-t-3xl shadow-2xl safe-area-bottom px-4 pt-4 pb-8">
+              {/* Handle */}
+              <div className="flex justify-center mb-4">
+                <div className="w-10 h-1 rounded-full bg-[var(--color-base-500)]" />
+              </div>
+              <h2 className="text-base font-semibold mb-4 px-2">Session Options</h2>
+              <div className="space-y-2">
+                {/* Discard session */}
+                <button
+                  onClick={handleDiscardTap}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-[var(--color-error)]/10 hover:bg-[var(--color-error)]/20 active:scale-[0.98] transition-all text-left"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-error)]/20 shrink-0">
+                    <Square className="h-5 w-5 text-[var(--color-error)]" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-[var(--color-error)]">Discard session</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                      Delete this workout. This cannot be undone.
+                    </p>
+                  </div>
+                </button>
+                {/* Cancel */}
+                <button
+                  onClick={() => setShowMoreOptions(false)}
+                  className="w-full py-3.5 rounded-xl bg-[var(--color-base-600)] font-medium text-sm text-[var(--color-text-secondary)] hover:opacity-90 transition-opacity"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Discard Confirm Modal (Task C.3) */}
+      <ConfirmModal
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={handleConfirmDiscard}
+        title="Discard workout?"
+        message="This workout will be permanently deleted. This cannot be undone."
+        confirmLabel="Discard"
+        cancelLabel="Keep going"
+        variant="danger"
+        isLoading={isDiscarding}
+      />
     </div>
   );
 }

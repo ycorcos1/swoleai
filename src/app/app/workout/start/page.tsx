@@ -289,33 +289,33 @@ export default function WorkoutStartPage() {
   }, [todaySchedule, handleStartWorkout]);
 
   // Start a freestyle workout (no template)
-  // For testing Task 5.3, we add sample exercises so the Set Logger can be tested
+  // Fetches the 3 default exercises from the DB by name so IDs are never hardcoded
   const handleStartFreestyle = useCallback(async () => {
     const workoutKey = 'freestyle';
     setStartingWorkoutId(workoutKey);
 
     try {
-      // Start session with sample exercises for testing Set Logger
-      await startSession({
-        title: 'Freestyle Workout',
-        initialExercises: [
-          {
-            localId: `ex_${Date.now()}_1`,
-            exerciseId: 'sample-bench-press',
-            exerciseName: 'Bench Press',
-          },
-          {
-            localId: `ex_${Date.now()}_2`,
-            exerciseId: 'sample-squat',
-            exerciseName: 'Squat',
-          },
-          {
-            localId: `ex_${Date.now()}_3`,
-            exerciseId: 'sample-deadlift',
-            exerciseName: 'Deadlift',
-          },
-        ],
-      });
+      // Fetch default exercise IDs from DB
+      let initialExercises: { localId: string; exerciseId: string; exerciseName: string }[] = [];
+      try {
+        const res = await fetch('/api/exercises');
+        if (res.ok) {
+          const data = await res.json() as { exercises?: { id: string; name: string }[] };
+          const defaults = ['Barbell Bench Press', 'Barbell Back Squat', 'Barbell Deadlift'];
+          initialExercises = defaults
+            .map((name, i) => {
+              const match = data.exercises?.find((e) => e.name === name);
+              return match
+                ? { localId: `ex_${Date.now()}_${i + 1}`, exerciseId: match.id, exerciseName: match.name }
+                : null;
+            })
+            .filter((e): e is { localId: string; exerciseId: string; exerciseName: string } => e !== null);
+        }
+      } catch {
+        // If fetch fails, start with empty session — user can add exercises
+      }
+
+      await startSession({ title: 'Freestyle Workout', initialExercises });
 
       // Try server API (may fail if DB is unreachable)
       try {

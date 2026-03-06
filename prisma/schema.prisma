@@ -222,6 +222,7 @@ model Exercise {
 
   // Index for efficient lookups of user's custom exercises
   @@index([ownerUserId, isCustom])
+  @@unique([name, ownerUserId])
   @@map("exercises")
 }
 
