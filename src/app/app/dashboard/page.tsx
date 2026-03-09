@@ -36,13 +36,13 @@ interface VolumeReport {
   weekEnd: string;
 }
 
-interface PRResult {
-  exerciseId: string;
-  exerciseName: string;
-  type: 'LOAD_PR' | 'REP_PR' | 'E1RM_PR' | 'VOLUME_PR';
-  newValue: number;
-  previousBest: number | null;
-  unit: string;
+interface ManualPR {
+  id: string;
+  weight: number;
+  reps: number;
+  notes: string | null;
+  achievedAt: string;
+  exercise: { id: string; name: string; muscleGroups: string[] };
 }
 
 interface PlateauCandidate {
@@ -145,13 +145,6 @@ const MUSCLE_DISPLAY: Record<string, string> = {
   LATS: 'Lats', ABS: 'Abs',
 };
 
-const PR_CONFIG: Record<PRResult['type'], { label: string; color: string; bg: string }> = {
-  LOAD_PR:   { label: 'Load PR',   color: 'text-amber-400',                            bg: 'bg-amber-500/10' },
-  REP_PR:    { label: 'Rep PR',    color: 'text-[var(--color-accent-purple)]',         bg: 'bg-purple-500/10' },
-  E1RM_PR:   { label: 'e1RM PR',   color: 'text-emerald-400',                          bg: 'bg-emerald-500/10' },
-  VOLUME_PR: { label: 'Volume PR', color: 'text-[var(--color-accent-blue)]',           bg: 'bg-blue-500/10' },
-};
-
 const SEVERITY_CONFIG: Record<PlateauCandidate['severity'], { color: string; icon: typeof TrendingDown }> = {
   mild:     { color: 'text-amber-400',   icon: Minus },
   moderate: { color: 'text-orange-400',  icon: TrendingDown },
@@ -208,9 +201,8 @@ export default function DashboardPage() {
   // Insights state
   const [volumeReport, setVolumeReport] = useState<VolumeReport | null>(null);
   const [volumeLoading, setVolumeLoading] = useState(true);
-  const [prs, setPrs] = useState<PRResult[]>([]);
+  const [prs, setPrs] = useState<ManualPR[]>([]);
   const [prsLoading, setPrsLoading] = useState(true);
-  const [prSession, setPrSession] = useState<RecentSession | null>(null);
   const [plateaus, setPlateaus] = useState<PlateauCandidate[]>([]);
   const [plateauLoading, setPlateauLoading] = useState(true);
 
@@ -244,6 +236,13 @@ export default function DashboardPage() {
     const weekStart = startOfWeekISO(now);
     const weekEnd = endOfWeekISO(now);
 
+    const fetchData = () => {
+    setLoadingSplit(true);
+    setLoadingStats(true);
+    setLoadingProposals(true);
+    setVolumeLoading(true);
+    setPrsLoading(true);
+    setPlateauLoading(true);
     // Fetch active split
     fetch('/api/splits')
       .then((res) => (res.ok ? res.json() : Promise.reject()))
@@ -298,29 +297,26 @@ export default function DashboardPage() {
       .then((data) => setVolumeReport(data?.report ?? null))
       .finally(() => setVolumeLoading(false));
 
-    fetch('/api/history?limit=1&status=COMPLETED')
+    fetch('/api/exercises/prs')
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
-      .then((data) => {
-        const session = data?.sessions?.[0];
-        if (!session) { setPrsLoading(false); return; }
-        setPrSession(session);
-        return fetch('/api/rules/prs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: session.id }),
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-          .then((prData) => setPrs(prData?.prs ?? []))
-          .finally(() => setPrsLoading(false));
-      });
+      .then((data) => setPrs(data?.prs ?? []))
+      .finally(() => setPrsLoading(false));
 
     fetch('/api/rules/plateau')
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
       .then((data) => setPlateaus(data?.plateaus ?? []))
       .finally(() => setPlateauLoading(false));
+    }; // end fetchData
+
+    fetchData();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   // ── Today Card ──────────────────────────────────────────────────────────────
@@ -658,7 +654,7 @@ export default function DashboardPage() {
       );
     }
 
-    if (!prSession) {
+    if (prs.length === 0) {
       return (
         <GlassCard className="mb-4">
           <h2 className="font-semibold mb-3 flex items-center gap-2">
@@ -667,7 +663,7 @@ export default function DashboardPage() {
           </h2>
           <div className="py-4 text-center">
             <Trophy className="h-8 w-8 mx-auto text-[var(--color-text-muted)] mb-2" />
-            <p className="text-sm text-[var(--color-text-muted)]">Complete a workout to see PRs here.</p>
+            <p className="text-sm text-[var(--color-text-muted)]">No PRs logged yet. Add them in Routine → PRs.</p>
           </div>
         </GlassCard>
       );
@@ -680,42 +676,25 @@ export default function DashboardPage() {
             <Trophy className="h-4 w-4 text-amber-400" />
             Personal Records
           </h2>
-          <span className="text-xs text-[var(--color-text-muted)]">Last session</span>
+          <a href="/app/routine" className="text-xs text-[var(--color-accent-purple)]">View all →</a>
         </div>
-        <p className="text-xs text-[var(--color-text-muted)] mb-3">
-          {prSession.title ?? 'Workout'} ·{' '}
-          {new Date(prSession.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </p>
-        {prs.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-            <TrendingUp className="h-4 w-4" />
-            No new PRs in this session. Keep pushing!
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {prs.map((pr, idx) => {
-              const cfg = PR_CONFIG[pr.type];
-              return (
-                <div
-                  key={`${pr.type}-${pr.exerciseId}-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border border-[var(--glass-border)] ${cfg.bg}`}
-                >
-                  <Trophy className={`h-4 w-4 shrink-0 ${cfg.color}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{pr.exerciseName}</p>
-                    <p className="text-xs text-[var(--color-text-muted)]">
-                      {pr.newValue} {pr.unit}
-                      {pr.previousBest !== null && <span className="ml-1">(was {pr.previousBest})</span>}
-                    </p>
-                  </div>
-                  <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
-                    {cfg.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div className="grid grid-cols-1 gap-2">
+          {prs.slice(0, 5).map((pr) => (
+            <div
+              key={pr.id}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-[var(--color-base-700)] border border-[var(--glass-border)]"
+            >
+              <Trophy className="h-4 w-4 shrink-0 text-amber-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{pr.exercise.name}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  {pr.weight} × {pr.reps} rep{pr.reps !== 1 ? 's' : ''} ·{' '}
+                  {new Date(pr.achievedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       </GlassCard>
     );
   }

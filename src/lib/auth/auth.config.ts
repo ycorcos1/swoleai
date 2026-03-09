@@ -88,7 +88,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true, // Enable debug for troubleshooting
+  debug: false,
   // Cookie configuration for production (Vercel)
   cookies: {
     sessionToken: {

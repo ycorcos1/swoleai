@@ -227,3 +227,12 @@ body {
   outline: 2px solid var(--color-accent-purple);
   outline-offset: 2px;
 }
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

@@ -101,6 +101,16 @@ enum SessionStatus {
   ABANDONED // Left incomplete (app closed, user quit)
 }
 
+// Day log status enum
+// Tracks what happened on a given calendar day
+enum DayLogStatus {
+  COMPLETED // User completed a workout
+  MISSED    // User missed a scheduled workout (shifts it forward)
+  REST      // User marked as rest (no shift)
+  SKIPPED   // User skipped (no shift, no log)
+  SHIFTED   // Workout was shifted here from a missed day
+}
+
 // Proposal status enum (Task 2.7)
 // Tracks the lifecycle of coach proposals and routine changes
 enum ProposalStatus {
@@ -168,6 +178,9 @@ model User {
 
   // Personal records
   personalRecords PersonalRecord[]
+
+  // Scheduled day logs
+  scheduledDayLogs ScheduledDayLog[]
 
   @@map("users")
 }
@@ -369,6 +382,9 @@ model WorkoutDayTemplate {
   // Relations (Task 2.6)
   workoutSessions WorkoutSession[] // Sessions performed using this template
 
+  // Day logs that had this template scheduled
+  scheduledDayLogs ScheduledDayLog[] @relation("ScheduledTemplate")
+
   // Index for efficient lookup of user's templates
   @@index([userId])
   @@map("workout_day_templates")
@@ -512,11 +528,52 @@ model WorkoutSession {
   // Relations
   exercises WorkoutExercise[] // Exercises performed in this session
 
+  // Day logs that reference this session
+  dayLogs ScheduledDayLog[]
+
   // Index for efficient lookup of user's sessions
   @@index([userId])
   @@index([userId, startedAt])
   @@index([userId, status])
   @@map("workout_sessions")
+}
+
+// ScheduledDayLog model
+// One record per calendar date per user — tracks what actually happened that day.
+// Created when a user marks a day as missed/rest, or automatically when a session
+// is completed (linked via workoutSessionId).
+model ScheduledDayLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // The calendar date this log applies to (date only, stored as midnight UTC)
+  date DateTime @map("date")
+
+  // Owner
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // What happened this day
+  status DayLogStatus
+
+  // The template that was originally scheduled for this day (if any)
+  scheduledTemplateId String? @map("scheduled_template_id")
+  scheduledTemplate   WorkoutDayTemplate? @relation("ScheduledTemplate", fields: [scheduledTemplateId], references: [id], onDelete: SetNull)
+
+  // The workout session completed on this day (if status=COMPLETED)
+  workoutSessionId String?         @map("workout_session_id")
+  workoutSession   WorkoutSession? @relation(fields: [workoutSessionId], references: [id], onDelete: SetNull)
+
+  // If status=MISSED, the template was shifted to this target date (soft shift)
+  shiftedToDate   DateTime? @map("shifted_to_date")
+  shiftedFromDate DateTime? @map("shifted_from_date")
+
+  // One log per user per date
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([userId, date])
+  @@map("scheduled_day_logs")
 }
 
 // WorkoutExercise model (Task 2.6)

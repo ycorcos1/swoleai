@@ -6,9 +6,9 @@
  * The primary workout logging interface for SwoleAI.
  *
  * Layout (per Design Spec 5.3.1):
- * - Top bar: session name, elapsed time, sync pill, overflow menu
+ * - Top bar: session name, elapsed time, overflow menu
  * - Exercise cards list: shows exercises with sets and "last time" summary
- * - Bottom sticky bar: Add Exercise, Timer, End Workout
+ * - Bottom sticky bar: Add Exercise, End Workout
  *
  * Features:
  * - Renders exercise cards list from IndexedDB (offline-first)
@@ -19,17 +19,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { SyncStatusPill } from '@/components/ui/SyncStatusPill';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { useActiveSessionContext } from '@/lib/offline';
 import {
   Dumbbell,
   Loader2,
   Plus,
-  Timer,
   Square,
   MoreVertical,
-  Clock,
   TrendingUp,
   Undo2,
   ArrowLeftRight,
@@ -38,15 +35,10 @@ import {
 } from 'lucide-react';
 import type { ActiveSessionExercise, ActiveSessionSet } from '@/lib/offline';
 import { SetLoggerSheet, AddExerciseSheet, SortableExerciseList, SwapExerciseSheet } from '@/components/workout';
-import { RestTimer } from '@/components/workout/RestTimer';
 
 // =============================================================================
 // TYPES
 // =============================================================================
-
-interface ElapsedTimeProps {
-  startedAt: Date;
-}
 
 interface ExerciseCardProps {
   exercise: ActiveSessionExercise;
@@ -64,51 +56,7 @@ interface ExerciseCardProps {
 
 interface BottomBarProps {
   onAddExercise: () => void;
-  onToggleTimer: () => void;
   onEndWorkout: () => void;
-  isTimerActive?: boolean;
-}
-
-// =============================================================================
-// ELAPSED TIME COMPONENT
-// =============================================================================
-
-/**
- * Displays elapsed workout time, updating every second
- */
-function ElapsedTime({ startedAt }: ElapsedTimeProps) {
-  const [elapsed, setElapsed] = useState('00:00');
-
-  useEffect(() => {
-    const updateElapsed = () => {
-      const now = new Date();
-      const diff = Math.floor((now.getTime() - startedAt.getTime()) / 1000);
-      const hours = Math.floor(diff / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-
-      if (hours > 0) {
-        setElapsed(
-          `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-        );
-      } else {
-        setElapsed(
-          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-        );
-      }
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [startedAt]);
-
-  return (
-    <div className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
-      <Clock className="h-4 w-4" />
-      <span className="tabular-nums font-medium">{elapsed}</span>
-    </div>
-  );
 }
 
 // =============================================================================
@@ -300,14 +248,11 @@ function ExerciseCard({ exercise, onTapAddSet, onTapEditSet, dragHandle, onTapSw
 /**
  * Sticky bottom bar with workout actions:
  * - Add Exercise
- * - Timer toggle
  * - End Workout
  */
 function BottomBar({
   onAddExercise,
-  onToggleTimer,
   onEndWorkout,
-  isTimerActive = false,
 }: BottomBarProps) {
   return (
     <div 
@@ -326,30 +271,6 @@ function BottomBar({
           </div>
           <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">
             Add
-          </span>
-        </button>
-
-        {/* Timer */}
-        <button
-          onClick={onToggleTimer}
-          className="flex flex-col items-center gap-1 touch-target"
-          aria-label={isTimerActive ? 'Pause timer' : 'Start timer'}
-        >
-          <div
-            className={`
-              flex h-12 w-12 items-center justify-center rounded-xl
-              ${isTimerActive 
-                ? 'bg-[var(--color-accent-purple)]/20 border border-[var(--color-accent-purple)]' 
-                : 'bg-[var(--color-base-600)]'
-              }
-            `}
-          >
-            <Timer
-              className={`h-6 w-6 ${isTimerActive ? 'text-[var(--color-accent-purple)]' : 'text-[var(--color-text-primary)]'}`}
-            />
-          </div>
-          <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">
-            Timer
           </span>
         </button>
 
@@ -398,39 +319,51 @@ function EmptyExerciseState({ onAddExercise }: { onAddExercise: () => void }) {
 export default function WorkoutSessionPage() {
   const params = useParams();
   const router = useRouter();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const sessionId = params.id as string; // Will be used for deep-linking in future tasks
+  const sessionId = params.id as string;
   const { session, isLoading, endSession, addExercise, updateExercise, logSet, updateSet, reorderExercises, canUndo, undoLastAction, abandonSession } = useActiveSessionContext();
+
+  // Server-side session state (for past/completed sessions not in IndexedDB)
+  const [serverSession, setServerSession] = useState<{
+    id: string;
+    title: string | null;
+    status: string;
+    exercises: {
+      id: string;
+      orderIndex: number;
+      exercise: { id: string; name: string };
+      sets: { id: string; setIndex: number; reps: number | null; weightKg: number | null; rpe: number | null; notes: string | null }[];
+    }[];
+  } | null>(null);
+  const [serverLoading, setServerLoading] = useState(false);
 
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [showEndWorkoutModal, setShowEndWorkoutModal] = useState(false);
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const [showRestTimer, setShowRestTimer] = useState(false);
-  // More options sheet (Task C.3)
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
-  // Units preference (G.4)
   const [units, setUnits] = useState<'IMPERIAL' | 'METRIC'>('IMPERIAL');
 
-  // Fetch units preference once on mount (G.4)
   useEffect(() => {
     fetch('/api/profile')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.profile?.units) {
-          setUnits(data.profile.units as 'IMPERIAL' | 'METRIC');
-        }
-      })
-      .catch(() => {/* non-critical */});
+      .then((data) => { if (data?.profile?.units) setUnits(data.profile.units as 'IMPERIAL' | 'METRIC'); })
+      .catch(() => {});
   }, []);
 
-  // Joint stress flags map: exerciseId → flags (H.1)
+  // When IndexedDB loading finishes and there's no active session, load from server
+  useEffect(() => {
+    if (isLoading || session) return;
+    setServerLoading(true);
+    fetch(`/api/workouts/${sessionId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setServerSession(data?.session ?? null))
+      .catch(() => {})
+      .finally(() => setServerLoading(false));
+  }, [isLoading, session, sessionId]);
+
   const [stressFlagsMap, setStressFlagsMap] = useState<Record<string, Record<string, string>>>({});
-  // Set of exercise localIds whose stress badge has been dismissed this session (H.1)
   const [dismissedStressBadges, setDismissedStressBadges] = useState<Set<string>>(new Set());
 
-  // Fetch exercise details to get jointStressFlags once per session load (H.1)
   useEffect(() => {
     fetch('/api/exercises')
       .then((r) => (r.ok ? r.json() : null))
@@ -444,21 +377,16 @@ export default function WorkoutSessionPage() {
         }
         setStressFlagsMap(map);
       })
-      .catch(() => {/* non-critical */});
+      .catch(() => {});
   }, []);
-  // Undo state (Task 5.5)
+
   const [isUndoing, setIsUndoing] = useState(false);
-  
-  // Set Logger sheet state
   const [selectedExercise, setSelectedExercise] = useState<ActiveSessionExercise | null>(null);
   const [showSetLoggerSheet, setShowSetLoggerSheet] = useState(false);
-  // Edit mode state (Task 5.4)
   const [editingSet, setEditingSet] = useState<ActiveSessionSet | null>(null);
-  // Add Exercise sheet state (Task 5.8)
   const [showAddExerciseSheet, setShowAddExerciseSheet] = useState(false);
-  // Swap Exercise sheet state (Task 7.2)
   const [swapTargetExercise, setSwapTargetExercise] = useState<ActiveSessionExercise | null>(null);
-  const [showSwapSheet, setShowSwapSheet] = useState(false);
+  const [showSwapSheet, setShowSwapSheet] = useState(false)
 
   // =============================================================================
   // HANDLERS
@@ -486,11 +414,6 @@ export default function WorkoutSessionPage() {
     },
     [swapTargetExercise, updateExercise]
   );
-
-  const handleToggleTimer = useCallback(() => {
-    setIsTimerActive((prev) => !prev);
-    setShowRestTimer((prev) => !prev);
-  }, []);
 
   // Undo handler (Task 5.5)
   const handleUndo = useCallback(async () => {
@@ -538,8 +461,7 @@ export default function WorkoutSessionPage() {
     try {
       await endSession();
       setShowEndWorkoutModal(false);
-      // Task 5.10: Navigate to workout summary screen
-      router.replace('/app/workout/summary');
+      router.replace('/app/workout/start');
     } catch (error) {
       console.error('Failed to end workout:', error);
       setIsEndingWorkout(false);
@@ -572,9 +494,6 @@ export default function WorkoutSessionPage() {
       set: Omit<ActiveSessionSet, 'setIndex' | 'loggedAt'>
     ) => {
       await logSet(exerciseLocalId, set);
-      // Auto-start rest timer after logging a set (Task C.1)
-      setIsTimerActive(true);
-      setShowRestTimer(true);
     },
     [logSet]
   );
@@ -595,7 +514,7 @@ export default function WorkoutSessionPage() {
   // RENDER: LOADING STATE
   // =============================================================================
 
-  if (isLoading) {
+  if (isLoading || serverLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[var(--color-accent-purple)]" />
@@ -603,24 +522,48 @@ export default function WorkoutSessionPage() {
     );
   }
 
-  // =============================================================================
-  // RENDER: NO ACTIVE SESSION
-  // =============================================================================
-
-  if (!session) {
+  // Past/completed session loaded from server — read/edit view
+  if (!session && serverSession) {
+    const serverExercises = [...serverSession.exercises].sort((a, b) => a.orderIndex - b.orderIndex);
     return (
-      <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-        <Dumbbell className="h-16 w-16 text-[var(--color-text-muted)] mb-4" />
-        <h1 className="text-xl font-bold mb-2">No Active Session</h1>
-        <p className="text-[var(--color-text-muted)] mb-6">
-          Start a workout to see it here.
-        </p>
-        <button
-          onClick={() => router.push('/app/workout/start')}
-          className="btn-primary"
-        >
-          Start Workout
-        </button>
+      <div className="flex flex-col min-h-full pb-24">
+        <header className="sticky top-0 z-30 bg-[var(--color-base-900)]/95 backdrop-blur-md border-b border-[var(--glass-border)]">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button onClick={() => router.back()} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-[var(--color-base-600)] transition-colors">
+              <X className="h-5 w-5 text-[var(--color-text-secondary)]" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-bold text-lg truncate">{serverSession.title || 'Workout'}</h1>
+              <p className="text-xs text-emerald-400 font-medium">Completed</p>
+            </div>
+          </div>
+        </header>
+        <main className="flex-1 px-4 py-4 space-y-3">
+          {serverExercises.length === 0 ? (
+            <GlassCard className="text-center py-12">
+              <Dumbbell className="h-12 w-12 mx-auto text-[var(--color-text-muted)] mb-3" />
+              <p className="text-sm text-[var(--color-text-muted)]">No exercises logged for this session.</p>
+            </GlassCard>
+          ) : (
+            serverExercises.map((ex) => (
+              <div key={ex.id} className="glass-card p-4">
+                <p className="font-semibold">{ex.exercise.name}</p>
+                {ex.sets.length === 0 ? (
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">No sets logged</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {ex.sets.map((s, idx) => (
+                      <span key={s.id} className="px-3 py-1.5 rounded-lg bg-[var(--color-base-600)] text-sm font-medium tabular-nums">
+                        <span className="text-[10px] text-[var(--color-text-muted)] mr-1">{idx + 1}</span>
+                        {s.weightKg ?? 0}×{s.reps ?? 0}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </main>
       </div>
     );
   }
@@ -640,10 +583,9 @@ export default function WorkoutSessionPage() {
             <h1 className="font-bold text-lg truncate">
               {session.title || 'Workout'}
             </h1>
-            <ElapsedTime startedAt={session.startedAt} />
           </div>
 
-          {/* Right: Undo + Sync Pill + Menu */}
+          {/* Right: Undo + Menu */}
           <div className="flex items-center gap-2">
             {/* Undo Button (Task 5.5) */}
             <button
@@ -662,7 +604,6 @@ export default function WorkoutSessionPage() {
                 className={`h-5 w-5 text-[var(--color-text-primary)] ${isUndoing ? 'animate-pulse' : ''}`} 
               />
             </button>
-            <SyncStatusPill showCount={false} />
             <button
               onClick={() => setShowMoreOptions(true)}
               className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-[var(--color-base-600)] transition-colors"
@@ -707,9 +648,7 @@ export default function WorkoutSessionPage() {
       {/* Bottom Bar */}
       <BottomBar
         onAddExercise={handleAddExercise}
-        onToggleTimer={handleToggleTimer}
         onEndWorkout={handleEndWorkout}
-        isTimerActive={isTimerActive}
       />
 
       {/* End Workout Confirmation Modal */}
@@ -754,16 +693,6 @@ export default function WorkoutSessionPage() {
           targetExerciseId={swapTargetExercise.exerciseId}
           targetExerciseName={swapTargetExercise.exerciseName}
           onSwap={handleSwapExercise}
-        />
-      )}
-
-      {/* Rest Timer (Task C.1) */}
-      {showRestTimer && (
-        <RestTimer
-          onClose={() => {
-            setShowRestTimer(false);
-            setIsTimerActive(false);
-          }}
         />
       )}
 
